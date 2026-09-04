@@ -6,6 +6,8 @@ venv/
 data/cache/
 data/raw/
 models/*.pkl
+!models/e05_lgbm.pkl
+models/_*.pkl
 models/*.joblib
 node_modules/
 web/dist/

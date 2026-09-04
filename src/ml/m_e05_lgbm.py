@@ -47,9 +47,10 @@ CACHE_PATH = MODEL_DIR / "_e05_feature_cache.pkl"
 FINAL_MODEL_PATH = MODEL_DIR / "e05_lgbm.pkl"
 
 # Сколько независимых розыгрышей расширенного набора строить. Каждый добавляет
-# около 3200 точек. Отдача убывает, но не исчезает: 0→1 даёт -0.0016,
-# 3→7 ещё -0.0005. Семь — компромисс с временем прогона.
-N_REPLICATES = int(os.environ.get("E05_REPLICATES", "7"))
+# около 3250 точек. Отдача убывает: 0→1 даёт -0.0012, 1→3 ещё -0.0009,
+# 3→5 -0.0002, 5→7 ноль. Пять — точка, где кривая ложится на полку, а прогон
+# ещё не разорителен: каждая реплика стоит прогона всех базовых методов.
+N_REPLICATES = int(os.environ.get("E05_REPLICATES", "5"))
 
 # Подбор гиперпараметров почти ничего не меняет (весь разброс по сетке уложился
 # в 0.0006), поэтому взята умеренно ёмкая конфигурация с сильной L2 и ранней
@@ -84,11 +85,12 @@ class _Bundle:
     методов по дополнительным точкам.
     """
 
-    def __init__(self, X, key_index, extra, feats):
+    def __init__(self, X, key_index, extra, feats, crop_map):
         self.X = X                  # признаки основных точек, в порядке context["points"]
         self.key_index = key_index  # (polygon_id, ord_day) -> строка X
         self.extra = extra          # список (X2, y2, g2)
         self.feats = feats
+        self.crop_map = crop_map    # кодировка культуры, обязана дожить до инференса
 
 
 _BUNDLES: dict[int, _Bundle] = {}
@@ -137,7 +139,7 @@ def _build_bundle(views, points, context, n_rep: int) -> _Bundle:
                           np.array([p.polygon_id for p in pts])))
         _save_cache(fp, extra)
 
-    return _Bundle(X, key_index, extra, feats)
+    return _Bundle(X, key_index, extra, feats, crop_map)
 
 
 def _load_cache(fp: str):
@@ -195,6 +197,13 @@ class _LGBMStack(BaseMethod):
         self.model = None
         self.bundle: _Bundle | None = None
         self.fallback: str | None = None
+        # Всё, что нужно предсказанию и переживает обучение: порядок колонок,
+        # кодировка культуры, имя опорной колонки. Без них predict_external
+        # не воспроизведёт ту же матрицу признаков, на которой училась модель.
+        self.feats: list[str] = []
+        self.crop_map: dict[str, int] = {}
+        self.anchor_col: str | None = None
+        self._ext_builder = None
 
     # -- обучение ----------------------------------------------------------- #
 
@@ -203,6 +212,9 @@ class _LGBMStack(BaseMethod):
 
         bundle = get_bundle(views, points, context, self.n_replicates)
         self.bundle = bundle
+        self.feats = list(bundle.feats)
+        self.crop_map = dict(bundle.crop_map)
+        self._ext_builder = None
         mask = context["train_mask"]
         groups = np.array([p.polygon_id for p in points])
         truth = np.array([p.truth for p in points], dtype=float)
@@ -257,9 +269,16 @@ class _LGBMStack(BaseMethod):
     # -- предсказание -------------------------------------------------------- #
 
     def predict_points(self, points: list, views, context: dict) -> np.ndarray:
+        """Быстрый путь валидации: признаки берутся из кэша прогона по ключу.
+
+        Точки, которых в кэше нет, уходят в predict_external и считаются честно.
+        Раньше они получали медиану опорного метода, и на боевом прогоне туда
+        уходили ВСЕ 3112 контрольных точек: их в локальном наборе нет по
+        построению. Молчаливая деградация до константы — худший из возможных
+        отказов, поэтому теперь непопадание в кэш просто дороже, а не хуже.
+        """
         bundle = self.bundle or get_bundle(views, context["points"], context, self.n_replicates)
-        rows = [bundle.key_index.get((p.polygon_id, int(p.ord_day)), -1) for p in points]
-        rows = np.array(rows)
+        rows = np.array([bundle.key_index.get((p.polygon_id, int(p.ord_day)), -1) for p in points])
         out = np.full(len(points), np.nan)
         ok = rows >= 0
         if ok.any():
@@ -268,12 +287,63 @@ class _LGBMStack(BaseMethod):
             if self.anchor_col:
                 pred = pred + Xq[self.anchor_col].to_numpy()
             out[ok] = pred
-        # Точка, которой нет в наборе признаков этого прогона (возможно только
-        # при инференсе вне валидации), возвращает опорный метод, а не NaN.
-        if (~ok).any() and self.fallback:
-            fb = bundle.X[self.fallback].to_numpy()
-            out[~ok] = np.nanmedian(fb)
+        if (~ok).any():
+            miss = [p for p, m in zip(points, ~ok) if m]
+            out[~ok] = self.predict_external(miss, views, context)
         return np.clip(out, 0.0, 1.0)
+
+    def predict_external(self, points: list, views, context: dict) -> np.ndarray:
+        """Предсказание на точках, которых не было в контрольном наборе.
+
+        От predict_points отличается тем, что таблица признаков строится здесь
+        же по переданным points и views, а не ищется в кэше прогона валидации.
+        Реплики расширенного набора не нужны: они существуют только ради
+        обучения. Ни контрольный набор, ни truth не читаются — ни один признак
+        их не требует, поэтому путь годится для боевого инференса.
+
+        Расстояния до соседей пересчитываются здесь заново по known_ord самих
+        views, а поля left_dist/right_dist/month/truth переданных точек
+        игнорируются. Так вызывающая сторона не может незаметно передать
+        геометрию, посчитанную по другому набору наблюдений, — а это
+        единственное место, где такая ошибка не упала бы, а тихо испортила
+        предсказание.
+        """
+        if self.model is None:
+            raise RuntimeError("модель не обучена: сначала fit(...) или load_model()")
+        if not points:
+            return np.empty(0, dtype=float)
+
+        norm = _normalise_points(points, views)
+        X = self._external_builder(views, context).transform(norm, context["base_preds"])
+
+        # Порядок и состав колонок берём из обучения. Реестр методов между
+        # обучением и инференсом меняться не должен, но если это случилось —
+        # лучше громко сказать, чем предсказывать по сдвинутым признакам.
+        missing = [c for c in self.feats if c not in X.columns]
+        if missing:
+            print(f"[e05] ВНИМАНИЕ: при инференсе не собрано {len(missing)} признаков "
+                  f"из {len(self.feats)}, первые: {missing[:5]}")
+            for c in missing:
+                X[c] = np.nan
+        Xq = X[self.feats]
+        pred = self.model.predict(Xq)
+        if self.anchor_col:
+            pred = pred + Xq[self.anchor_col].to_numpy()
+        return np.clip(pred, 0.0, 1.0)
+
+    def _external_builder(self, views, context) -> FT.FeatureBuilder:
+        """Сборщик признаков для боевых точек, с кэшем на экземпляре.
+
+        Погодные группы и суточная поправка соседей считаются по всему набору
+        и стоят несколько секунд — пересчитывать их на каждый вызов не нужно.
+        Кодировка культуры обязана совпасть с обучением, поэтому crop_map
+        берётся сохранённый, а не пересобранный по этим views.
+        """
+        if self._ext_builder is None:
+            weather = FT.WeatherGroups(context.get("raw", context["df"]))
+            self._ext_builder = FT.FeatureBuilder(views, weather=weather,
+                                                  crop_map=self.crop_map)
+        return self._ext_builder
 
     # -- важность признаков --------------------------------------------------- #
 
@@ -323,6 +393,46 @@ if os.environ.get("E05_ABLATION"):
 # --------------------------------------------------------------------------- #
 # Инференс сохранённой моделью
 # --------------------------------------------------------------------------- #
+
+def _normalise_points(points: list, views: dict[str, PolygonView]) -> list:
+    """Пересобирает точки, считая расстояния до соседей по самим views.
+
+    Именно так их считает протокол валидации (holdout._neighbour_distances),
+    и именно так их обязан считать инференс: геометрия разрыва — признак, а не
+    метаданные, и посчитанная по другому набору наблюдений она сдвинет
+    предсказание, ничего не сломав по дороге.
+
+    truth не читается и не заполняется: на боевых точках его нет.
+    """
+    out = [None] * len(points)
+    by_polygon: dict[str, list[int]] = {}
+    for i, p in enumerate(points):
+        by_polygon.setdefault(p.polygon_id, []).append(i)
+    for pid, idx in by_polygon.items():
+        ords = np.array([int(points[i].ord_day) for i in idx], dtype=np.int64)
+        known = views[pid].known_ord if pid in views else np.array([], dtype=np.int64)
+        if len(known):
+            left, right = H._neighbour_distances(ords, known)
+        else:
+            left = right = np.full(len(ords), -1, dtype=np.int64)
+        months = pd.to_datetime([pd.Timestamp.fromordinal(int(o)) for o in ords]).month
+        for k, i in enumerate(idx):
+            out[i] = H.HoldoutPoint(polygon_id=pid, ord_day=int(ords[k]),
+                                    truth=float("nan"),
+                                    left_dist=int(left[k]), right_dist=int(right[k]),
+                                    month=int(months[k]))
+    return out
+
+
+def from_saved(path: Path = FINAL_MODEL_PATH) -> "_LGBMStack":
+    """Готовый к predict_external метод из models/e05_lgbm.pkl, без обучения."""
+    blob = load_model(path)
+    m = _LGBMStack(anchor=blob.get("anchor"), use_extra=False)
+    m.model = blob["booster"]
+    m.feats = list(blob["feats"])
+    m.crop_map = dict(blob.get("crop_map") or {})
+    m.anchor_col = blob.get("anchor_col")
+    return m
 
 def load_model(path: Path = FINAL_MODEL_PATH):
     """Загружает финальную модель, обученную на всех точках сразу.

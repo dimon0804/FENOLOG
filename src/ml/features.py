@@ -208,6 +208,16 @@ class SiblingStats:
     def __init__(self, views: dict[str, PolygonView], lam: float = 1000.0):
         from src.ml.m_e06_sibling import residual_table
 
+        # Взвешенное число соседей из E06: соседи с высокой корреляцией остатков
+        # весят больше, чем случайные поля. Это более точная мера надёжности
+        # поправки, чем голый счётчик, поэтому берём обе величины.
+        self.n_eff_days, self.n_eff = None, {}
+        try:
+            from src.ml.m_e06_sibling import sibling_counts
+            self.n_eff_days, self.n_eff = sibling_counts(views, lam=lam)
+        except Exception:
+            pass
+
         table, _ = residual_table(views, lam=lam)
         self.days = table.index.to_numpy(dtype=np.int64)
         arr = table.to_numpy()
@@ -233,21 +243,28 @@ class SiblingStats:
             self.sd[pid] = np.sqrt(np.clip(q / safe - mean ** 2, 0.0, None))
 
     def at(self, polygon_id: str, ords: np.ndarray):
-        """Поправка, число соседей и разброс остатков на указанные даты."""
+        """Поправка, число соседей, разброс остатков и взвешенное число соседей."""
         n = len(ords)
         c = self.corr.get(polygon_id)
         if c is None:
-            return np.zeros(n), np.zeros(n), np.full(n, np.nan)
+            z = np.zeros(n)
+            return z, z.copy(), np.full(n, np.nan), z.copy()
         pos = np.searchsorted(self.days, ords)
         pos = np.clip(pos, 0, len(self.days) - 1)
         hit = self.days[pos] == ords
         out_c = np.zeros(n)
         out_n = np.zeros(n)
         out_s = np.full(n, np.nan)
+        out_e = np.zeros(n)
         out_c[hit] = c[pos[hit]]
         out_n[hit] = self.nsib[polygon_id][pos[hit]]
         out_s[hit] = self.sd[polygon_id][pos[hit]]
-        return out_c, out_n, out_s
+        eff = self.n_eff.get(polygon_id)
+        if eff is not None and self.n_eff_days is not None:
+            p2 = np.clip(np.searchsorted(self.n_eff_days, ords), 0, len(self.n_eff_days) - 1)
+            h2 = self.n_eff_days[p2] == ords
+            out_e[h2] = eff[p2[h2]]
+        return out_c, out_n, out_s, out_e
 
 
 # --------------------------------------------------------------------------- #
@@ -460,6 +477,7 @@ class FeatureBuilder:
         left_out_span, right_out_span = blank(), blank()
         wx_temp, wx_prec = blank(), blank()
         sib_c, sib_n, sib_s = np.zeros(n), np.zeros(n), blank()
+        sib_e = np.zeros(n)
         sib_cl, sib_cr = np.zeros(n), np.zeros(n)
         sib_nl, sib_nr = np.zeros(n), np.zeros(n)
         cnt = {w: np.zeros(n) for w in COUNT_WINDOWS}
@@ -540,12 +558,12 @@ class FeatureBuilder:
                 wx_temp[idx], wx_prec[idx] = et, ep
 
             # --- суточная поправка соседних полей на дату цели и на даты соседей ---
-            cc, nn, ss = self.siblings.at(str(pid), t)
-            sib_c[idx], sib_n[idx], sib_s[idx] = cc, nn, ss
+            cc, nn, ss, ee = self.siblings.at(str(pid), t)
+            sib_c[idx], sib_n[idx], sib_s[idx], sib_e[idx] = cc, nn, ss, ee
             for arr, dst_c, dst_n in ((l_ord, sib_cl, sib_nl), (r_ord, sib_cr, sib_nr)):
                 ok = np.isfinite(arr)
                 if ok.any():
-                    c2, n2, _ = self.siblings.at(str(pid), arr[ok].astype(np.int64))
+                    c2, n2, _, _ = self.siblings.at(str(pid), arr[ok].astype(np.int64))
                     dst_c[idx[ok]] = c2
                     dst_n[idx[ok]] = n2
 
@@ -606,6 +624,9 @@ class FeatureBuilder:
         cols["sib_corr"] = sib_c
         cols["sib_n"] = sib_n
         cols["sib_std"] = sib_s
+        # Взвешенное число соседей (E06): соседи с высокой корреляцией остатков
+        # весят больше случайных полей — это и есть мера доверия к поправке
+        cols["sib_neff"] = sib_e
         # Ниже трёх соседей поправка не применяется вовсе — это принципиально
         # другой режим работы методов E06, и модель должна его различать.
         cols["sib_applied"] = (sib_n >= SiblingStats.MIN_SIBLINGS).astype(float)
