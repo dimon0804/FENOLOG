@@ -1,0 +1,4 @@
+C:\Users\Dmitry\Desktop\fenolog\src\ml\m_e02_clean.py:317: RuntimeWarning: All-NaN slice encountered
+  m = np.nanmedian(a, axis=1)
+C:\Users\Dmitry\Desktop\fenolog\src\ml\m_e02_clean.py:328: RuntimeWarning: All-NaN slice encountered
+  m = np.nanmedian(clipped[:, order], axis=1)

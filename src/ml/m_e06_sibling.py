@@ -199,46 +199,31 @@ class _SiblingIterative(_SiblingBase):
     иначе поле частично вычитало бы собственный шум и оценка была бы смещённой.
     """
 
-    def __init__(self, beta: float = 1.0, lam: float = 1000.0, rounds: int = 1):
+    def __init__(self, beta: float = 1.0, lam: float = 1000.0, corr_power: float = 0.0,
+                 clip_lo: float = -0.25, clip_hi: float = 0.25):
         super().__init__(beta=beta, lam=lam, robust=True)
-        self.rounds = rounds
+        self.corr_power = corr_power
+        self.clip_lo = clip_lo
+        self.clip_hi = clip_hi
 
     def predict_points(self, points, views, context):
         table, smoothed = self._residual_table(views)
         if table.empty:
             return np.full(len(points), FALLBACK_NDVI)
 
-        arr = table.to_numpy()
-        cols = list(table.columns)
-        col_index = {c: i for i, c in enumerate(cols)}
-        days = table.index.to_numpy()
+        days, corr, n_eff = _corrections_from_table(
+            table, corr_power=self.corr_power, clip_lo=self.clip_lo, clip_hi=self.clip_hi)
         day_index = {int(d): i for i, d in enumerate(days)}
 
-        # Суточная поправка без учёта самого поля: сумма и счётчик по строке,
-        # из которых вычитается вклад текущего столбца. Медиана здесь была бы
-        # устойчивее, но её leave-one-out версия стоит на порядок дороже,
-        # а разброс по столбцам уже подрезан отсечением выбросов ниже.
-        finite = np.isfinite(arr)
-        clipped = np.where(finite, np.clip(arr, -0.25, 0.25), 0.0)
-        row_sum = clipped.sum(axis=1)
-        row_cnt = finite.sum(axis=1)
-
-        def correction_for(col: int) -> np.ndarray:
-            """Суточная поправка для одного поля, без его собственного вклада."""
-            s = row_sum - clipped[:, col]
-            n = row_cnt - finite[:, col]
-            out = np.where(n >= MIN_SIBLINGS, s / np.maximum(n, 1), 0.0)
-            return out
-
-        # Пересглаживание очищенных рядов
+        # Пересглаживание очищенных рядов: та же суточная помеха сидит и в опорных
+        # наблюдениях самого поля, по которым строится сглаженная кривая
         cleaned: dict[str, tuple] = {}
         for pid, view in views.items():
-            ci = col_index.get(pid)
-            if ci is None or len(view.known_ord) < 4:
+            c = corr.get(pid)
+            if c is None or len(view.known_ord) < 4:
                 continue
-            corr = correction_for(ci)
             idx = np.array([day_index[int(d)] for d in view.known_ord])
-            y = view.known_values - corr[idx]
+            y = view.known_values - c[idx]
             cleaned[pid] = restore_on_grid(view.known_ord, y, lam=self.lam, mix=1.0)
 
         out = np.empty(len(points), dtype=float)
@@ -246,13 +231,9 @@ class _SiblingIterative(_SiblingBase):
             grid, values = cleaned.get(p.polygon_id, smoothed.get(p.polygon_id, (None, None)))
             base = (predict_at(grid, values, np.array([p.ord_day]))[0]
                     if grid is not None else FALLBACK_NDVI)
-            ci = col_index.get(p.polygon_id)
+            c = corr.get(p.polygon_id)
             row = day_index.get(int(p.ord_day))
-            add = 0.0
-            if ci is not None and row is not None:
-                n = row_cnt[row] - finite[row, ci]
-                if n >= MIN_SIBLINGS:
-                    add = (row_sum[row] - clipped[row, ci]) / n
+            add = float(c[row]) if (c is not None and row is not None) else 0.0
             out[k] = base + self.beta * add
         return np.clip(out, 0.0, 1.0)
 
@@ -285,38 +266,90 @@ class SiblingIterL3000(_SiblingIterative):
 # Публичный интерфейс для остальных экспериментов
 # ---------------------------------------------------------------------------
 
+def _corrections_from_table(table: pd.DataFrame, corr_power: float = 0.0,
+                            clip_lo: float = -0.25, clip_hi: float = 0.25):
+    """Суточная поправка для каждого поля по таблице остатков.
+
+    corr_power — степень, в которую возводится корреляция остатков соседа с
+    остатками целевого поля, чтобы получить его вес. Ноль означает равные веса.
+    Замерено: степень 3 даёт −0,0035 к RMSE относительно равных весов, плато 2–4,
+    и это больше, чем даёт вся очистка ряда. Смысл прямой — сосед, который
+    исторически ошибается вместе с нами, несёт про нашу ошибку больше информации,
+    чем поле за сто километров. Плавное взвешивание обгоняет отбор top-k соседей
+    при любом k: слабые соседи не мусор, их вклад просто должен быть меньше.
+
+    Подрезка остатков несимметрична: распределение остатков скошено влево
+    (асимметрия −1,23, за пределами ±0,35 сорок шесть провалов против шести
+    всплесков), потому что облачность занижает NDVI сильнее, чем что-либо его
+    завышает. После взвешивания по корреляции способ подрезки почти перестаёт
+    влиять, но оставлен как дешёвая страховка от грубого брака.
+
+    Возвращает (days, corr, n_eff): дни, словарь поправок по полигонам и
+    эффективное число соседей, сформировавших поправку.
+    """
+    days = table.index.to_numpy()
+    arr = table.to_numpy()
+    finite = np.isfinite(arr).astype(float)
+    clipped = np.where(finite > 0, np.clip(arr, clip_lo, clip_hi), 0.0)
+
+    n = arr.shape[1]
+    if corr_power > 0:
+        # Диагональ обнуляется — это и есть leave-one-out: поле не участвует
+        # в собственной поправке и не вычитает свой же шум.
+        C = table.corr(min_periods=30).to_numpy()
+        C = np.nan_to_num(C, nan=0.0)
+        W = np.clip(C, 0.0, None) ** corr_power
+        np.fill_diagonal(W, 0.0)
+    else:
+        W = np.ones((n, n))
+        np.fill_diagonal(W, 0.0)
+
+    # Два матричных умножения вместо цикла по полям: дни × поля на поля × поля
+    num = clipped @ W.T
+    den = finite @ W.T
+    cnt = finite @ (W > 0).T
+
+    with np.errstate(invalid="ignore", divide="ignore"):
+        values = np.where(den > 0, num / np.maximum(den, 1e-12), 0.0)
+    values = np.where(cnt >= MIN_SIBLINGS, values, 0.0)
+
+    corr = {pid: values[:, j] for j, pid in enumerate(table.columns)}
+    n_eff = {pid: cnt[:, j] for j, pid in enumerate(table.columns)}
+    return days, corr, n_eff
+
+
 def residual_table(views: dict[str, PolygonView], lam: float = 1000.0):
     """Остатки всех полей от их сглаженных рядов: строки — дни, столбцы — поля."""
     return _SiblingBase(lam=lam)._residual_table(views)
 
 
-def daily_correction(views: dict[str, PolygonView], lam: float = 1000.0):
+def daily_correction(views: dict[str, PolygonView], lam: float = 1000.0,
+                     corr_power: float = 3.0):
     """Общая суточная поправка — то, что все поля ошибаются в один день вместе.
 
     Возвращает (days, corr), где corr[pid] — массив поправок по дням days,
-    посчитанный БЕЗ вклада самого поля pid (leave-one-out). Выбросы подрезаются
-    по ±0,25: одно грубо испорченное поле не должно тянуть за собой всю группу.
+    посчитанный БЕЗ вклада самого поля (leave-one-out) и со взвешиванием соседей
+    по корреляции их остатков с остатками этого поля.
 
-    Этой функцией пользуются эксперименты E02-E05, чтобы строиться поверх
+    Этой функцией пользуются эксперименты E02-E07, чтобы строиться поверх
     очищенного ряда, а не поверх сырого.
     """
     table, _ = residual_table(views, lam=lam)
-    days = table.index.to_numpy()
-    arr = table.to_numpy()
-    finite = np.isfinite(arr)
-    clipped = np.where(finite, np.clip(arr, -0.25, 0.25), 0.0)
-    row_sum = clipped.sum(axis=1)
-    row_cnt = finite.sum(axis=1)
-
-    corr = {}
-    for j, pid in enumerate(table.columns):
-        s = row_sum - clipped[:, j]
-        n = row_cnt - finite[:, j]
-        corr[pid] = np.where(n >= MIN_SIBLINGS, s / np.maximum(n, 1), 0.0)
+    days, corr, _ = _corrections_from_table(table, corr_power=corr_power)
     return days, corr
 
 
-def cleaned_series(views: dict[str, PolygonView], lam: float = 1000.0):
+def sibling_counts(views: dict[str, PolygonView], lam: float = 1000.0,
+                   corr_power: float = 3.0):
+    """Сколько соседей сформировало поправку на каждый день. Признак для бустинга:
+    там, где соседей мало, поправке верить нельзя, и модель должна это различать."""
+    table, _ = residual_table(views, lam=lam)
+    days, _, n_eff = _corrections_from_table(table, corr_power=corr_power)
+    return days, n_eff
+
+
+def cleaned_series(views: dict[str, PolygonView], lam: float = 1000.0,
+                   corr_power: float = 3.0):
     """Наблюдения полей за вычетом общей суточной помехи.
 
     Возвращает (clean, days, corr): clean[pid] = (дни, очищенные значения).
@@ -324,7 +357,7 @@ def cleaned_series(views: dict[str, PolygonView], lam: float = 1000.0):
     начинает работать с ряда, из которого убрана предсказуемая часть шума.
     Не забудь прибавить поправку обратно на дату цели.
     """
-    days, corr = daily_correction(views, lam=lam)
+    days, corr = daily_correction(views, lam=lam, corr_power=corr_power)
     day_index = {int(d): i for i, d in enumerate(days)}
     clean = {}
     for pid, view in views.items():
@@ -342,3 +375,29 @@ def correction_at(days: np.ndarray, corr: dict, polygon_id: str, ord_days: np.nd
     if c is None:
         return np.zeros(len(ord_days))
     return np.array([c[day_index[int(t)]] if int(t) in day_index else 0.0 for t in ord_days])
+
+
+@register("sibw3", "Суточная поправка, вес соседа corr^3", experiment="E06b")
+class SiblingWeighted3(_SiblingIterative):
+    """Соседи взвешены по корреляции остатков. Прирост −0,0035 к равным весам."""
+
+    def __init__(self):
+        super().__init__(beta=1.0, lam=1000.0, corr_power=3.0, clip_lo=-0.15, clip_hi=0.25)
+
+
+@register("sibw3_l500", "Суточная поправка, вес corr^3, λ = 500", experiment="E06b")
+class SiblingWeighted3L500(_SiblingIterative):
+    def __init__(self):
+        super().__init__(beta=1.0, lam=500.0, corr_power=3.0, clip_lo=-0.15, clip_hi=0.25)
+
+
+@register("sibw2_l500", "Суточная поправка, вес corr^2, λ = 500", experiment="E06b")
+class SiblingWeighted2L500(_SiblingIterative):
+    def __init__(self):
+        super().__init__(beta=1.0, lam=500.0, corr_power=2.0, clip_lo=-0.15, clip_hi=0.25)
+
+
+@register("sibw4_l500", "Суточная поправка, вес corr^4, λ = 500", experiment="E06b")
+class SiblingWeighted4L500(_SiblingIterative):
+    def __init__(self):
+        super().__init__(beta=1.0, lam=500.0, corr_power=4.0, clip_lo=-0.15, clip_hi=0.25)
