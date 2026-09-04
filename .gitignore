@@ -13,3 +13,7 @@ web/dist/
 .idea/
 .vscode/
 submission*.csv
+
+# Внутренние документы команды — в публичный репозиторий не идут
+CLAUDE.md
+docs/
