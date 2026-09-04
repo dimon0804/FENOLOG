@@ -133,6 +133,9 @@ def build_holdout(
             "month": g["_month"].to_numpy(dtype=np.int64),
             "src": g["_source"].to_numpy() if "_source" in g.columns else np.full(len(g), "test"),
             "hidden": np.zeros(len(g), dtype=bool),
+            # Соседи уже собранных контрольных точек: их прятать нельзя, иначе
+            # разрыв у ранее размещённой точки задним числом растянется
+            "protected": np.zeros(len(g), dtype=bool),
         }
 
     # Пул кандидатов на роль центра шаблона, разложенный по месяцам. Тянем
@@ -205,6 +208,10 @@ def build_holdout(
             # же бин, что и шаблон. Без неё захват соседей растягивает разрывы.
             if gap_bin(got_left, got_right)[0] != want_bin:
                 continue
+            candidate_victims = np.flatnonzero(
+                alive & (state["ord"] > state["ord"][jl]) & (state["ord"] < state["ord"][jr]))
+            if state["protected"][candidate_victims].any():
+                continue
             placed = (state, i, p, jl, jr, got_left, got_right, alive)
             break
 
@@ -217,6 +224,8 @@ def build_holdout(
         hidden_rows.extend(state["row"][victims].tolist())
         hidden_count += len(victims)
         quota[want_bin] -= 1
+        state["protected"][jl] = True
+        state["protected"][jr] = True
         points.append(
             HoldoutPoint(
                 polygon_id=state["pid"],
@@ -227,6 +236,22 @@ def build_holdout(
                 month=month,
             )
         )
+
+    # Пересчёт фактических расстояний после сборки набора.
+    #
+    # Расстояния, записанные в момент размещения шаблона, верны только на тот
+    # момент. Более поздний шаблон может спрятать наблюдение, которое раньше было
+    # засчитано соседом уже собранной точки — и тогда её реальный разрыв
+    # оказывается длиннее записанного. Без этого пересчёта расходились 4,4 %
+    # точек, в отдельных случаях на два порядка: записано 4 дня, фактически 168.
+    # Ошибка не искажает саму RMSE, но портит разрез по бинам и признаки
+    # «расстояние до соседа» у методов, которые на них опираются.
+    for state in per_polygon.values():
+        state["alive_ord"] = state["ord"][~state["hidden"]]
+    for point in points:
+        alive_ord = per_polygon[point.polygon_id]["alive_ord"]
+        left, right = _neighbour_distances(np.array([point.ord_day], dtype=np.int64), alive_ord)
+        point.left_dist, point.right_dist = int(left[0]), int(right[0])
 
     return points, np.array(sorted(set(hidden_rows)), dtype=np.int64)
 

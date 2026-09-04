@@ -235,7 +235,7 @@ def _gap_span(view: PolygonView, targets: np.ndarray) -> np.ndarray:
     return np.where(left < 0, right * 2, np.where(right < 0, left * 2, left + right))
 
 
-# ------------------------------------------------------------------- методы
+# ---------------------------------------------------------------- каркас якоря
 
 class _ClimAnchor(BaseMethod):
     """Общий каркас якоря. Наследники задают только источник нормы и пороги.
@@ -253,6 +253,10 @@ class _ClimAnchor(BaseMethod):
     shrink    — если задано, остаток на длинном разрыве стягивается к нулю с
                 характерным масштабом shrink дней: чем дальше сосед, тем меньше
                 доверия аномалии сезона и тем ближе ответ к чистой норме
+    weight    — доля якоря в ответе на тех точках, где он включён. Единица —
+                чистый якорь, ноль — база. Оптимум лежит около половины: якорь
+                несёт сигнал, которого в базе нет, но собственная ошибка нормы
+                у него больше, и брать его целиком — переплата
     sibling   — строиться поверх E06: сначала снять с ряда общую суточную помеху
                 (её видно по соседним полям), и только потом вычитать норму.
                 Порядок важен: якорь работает с аномалией сезона, а суточная
@@ -262,7 +266,7 @@ class _ClimAnchor(BaseMethod):
     def __init__(self, source: str, lam: float = 1000.0, mix: float = 1.0,
                  gap_min: int = 0, shrink: float | None = None,
                  base_lam: float = 1000.0, base_mix: float = 1.0,
-                 sibling: bool = False):
+                 weight: float = 1.0, sibling: bool = False):
         self.source = source
         self.lam = lam
         self.mix = mix
@@ -270,6 +274,7 @@ class _ClimAnchor(BaseMethod):
         self.base_mix = base_mix
         self.gap_min = gap_min
         self.shrink = shrink
+        self.weight = weight
         self.sibling = sibling
         self._crop: CropClimatology | None = None
         self._clean: dict = {}
@@ -373,11 +378,13 @@ class _ClimAnchor(BaseMethod):
             r_hat = r_hat * np.exp(-span / float(self.shrink))
 
         anchored = np.clip(r_hat + t_norm + corr_t, 0.0, 1.0)
+        # Выпуклая смесь базы и якоря: оба уже лежат в [0, 1], значит и смесь тоже
+        mixed = (1.0 - self.weight) * fallback + self.weight * anchored
 
         use = np.isfinite(t_norm)
         if self.gap_min > 0:
             use &= _gap_span(view, targets) >= self.gap_min
-        return np.where(use, anchored, fallback)
+        return np.where(use, mixed, fallback)
 
 
 # --------------------------------------------------------------------- методы
@@ -458,3 +465,24 @@ class AnchorOwnRaw(_ClimAnchor):
 
     def __init__(self):
         super().__init__(source="own", lam=100000.0, gap_min=45, sibling=False)
+
+
+@register("e04_own_g45_w50", "Якорь: своя норма, от 45 дней, доля 0,5", experiment="E04")
+class AnchorOwnGap45Half(_ClimAnchor):
+    def __init__(self):
+        super().__init__(source="own", lam=100000.0, gap_min=45, weight=0.5, sibling=True)
+
+
+@register("e04_anchor", "Якорь: норма из колонки, от 45 дней, доля 0,5", experiment="E04",
+          tags=("accepted",))
+class AnchorAccepted(_ClimAnchor):
+    """Принятая конфигурация E04.
+
+    Полная замена базы якорем не воспроизводится от зерна к зерну: якорь несёт
+    свой сигнал, но и свою ошибку нормы, и на некоторых наборах вторая
+    перевешивает первую. Половинная доля забирает первое и вдвое ослабляет
+    второе — выигрыш на длинных разрывах держится на всех трёх зёрнах протокола.
+    """
+
+    def __init__(self):
+        super().__init__(source="file", lam=100000.0, gap_min=45, weight=0.5, sibling=True)

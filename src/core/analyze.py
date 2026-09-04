@@ -148,12 +148,17 @@ def analyze(inp: SeriesInput, output_step: int = OUTPUT_STEP_DAYS) -> AnalysisRe
             )
         )
 
+    # Флаг «на этот день есть реальный снимок» нужен детектору: период,
+    # собранный целиком из интерполяции, не подтверждён ни одним наблюдением.
+    observed_flags = np.array([d in observed_map for d in grid_dates])
+
     anomalies = build_periods(
         grid_dates,
         z,
         inp.weather,
         crop_type=inp.crop_type,
         norm_is_crop=(clim_kind == "crop"),
+        observed=observed_flags,
     )
 
     return AnalysisResult(

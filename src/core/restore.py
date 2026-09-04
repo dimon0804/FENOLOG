@@ -51,16 +51,20 @@ def restore_on_grid(
     y: np.ndarray,
     lam: float = 100.0,
     mix: float = 0.5,
+    clip: bool = True,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Восстанавливает ряд на сплошной посуточной сетке.
 
     t_days — целочисленные дни наблюдений (например, ordinal даты)
     y      — значения, NaN в пропусках
     mix    — доля Уиттекера в смеси; остальное берётся из линейной интерполяции
+    clip   — отсекать ли значения вне физического диапазона NDVI. Выключается,
+             когда восстанавливается не сам индекс, а отклонение от нормы:
+             остаток живёт вокруг нуля, и подрезка по [-0.2, 1.0] его калечит
 
     Возвращает (сетка дней, восстановленные значения на всей сетке).
     """
-    y = clip_outliers(np.asarray(y, dtype=float))
+    y = clip_outliers(np.asarray(y, dtype=float)) if clip else np.asarray(y, dtype=float)
     t_days = np.asarray(t_days, dtype=np.int64)
 
     grid = np.arange(t_days.min(), t_days.max() + 1, dtype=np.int64)
