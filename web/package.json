@@ -1,0 +1,22 @@
+{
+  "name": "fenolog-web",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Интерфейс сервиса «Фенолог»: карта, ряд NDVI, лента аномальных периодов",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "maplibre-gl": "6.7.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "recharts": "3.10.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "6.1.1",
+    "vite": "8.2.2"
+  }
+}
