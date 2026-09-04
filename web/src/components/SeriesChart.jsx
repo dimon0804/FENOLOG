@@ -14,6 +14,16 @@ import {
 
 import { CAUSE, SENSOR, SEVERITY, formatDate } from '../dict.js'
 
+// Физический диапазон NDVI для растительности.
+const NDVI_MIN = 0
+const NDVI_MAX = 1
+const clamp = (v) => Math.min(NDVI_MAX, Math.max(NDVI_MIN, v))
+
+// Вегетационный сезон, месяцы включительно. Те же границы, в которых ядро
+// ищет периоды: вне сезона низкий индекс — это снег и голая почва, а не
+// состояние посева.
+const SEASON = [4, 10]
+
 /**
  * Главный график: ряд NDVI.
  *
@@ -26,8 +36,11 @@ import { CAUSE, SENSOR, SEVERITY, formatDate } from '../dict.js'
 export default function SeriesChart({ series, anomalies, activeAnomaly, onPickAnomaly }) {
   const data = useMemo(
     () =>
-      series.map((point) => ({
-        t: Date.parse(point.date),
+      series.map((point) => {
+        const date = new Date(point.date)
+        const inSeason = date.getMonth() + 1 >= SEASON[0] && date.getMonth() + 1 <= SEASON[1]
+        return {
+        t: date.getTime(),
         observed: point.observed,
         restored: point.restored,
         zscore: point.zscore,
@@ -36,14 +49,21 @@ export default function SeriesChart({ series, anomalies, activeAnomaly, onPickAn
         // Коридор нормы в два стандартных отклонения: нижняя его граница и есть
         // порог класса «угнетение биомассы», поэтому полоса на графике —
         // не украшение, а объяснение, откуда берутся периоды.
+        //
+        // Рисуется только в сезон, и по двум причинам сразу. Зимой разброс нормы
+        // огромен — верхняя граница уходит за 1,4, чего у вегетационного индекса
+        // не бывает, — и такая полоса закрывает собой полграфика, не сообщая
+        // ничего. Плюс ядро вне сезона периоды и не ищет, так что показывать там
+        // норму значило бы обещать сравнение, которого не происходит.
         band:
-          point.climatology_mean != null && point.climatology_std != null
+          inSeason && point.climatology_mean != null && point.climatology_std != null
             ? [
-                point.climatology_mean - 2 * point.climatology_std,
-                point.climatology_mean + 2 * point.climatology_std,
+                clamp(point.climatology_mean - 2 * point.climatology_std),
+                clamp(point.climatology_mean + 2 * point.climatology_std),
               ]
             : null,
-      })),
+        }
+      }),
     [series],
   )
 
@@ -58,13 +78,13 @@ export default function SeriesChart({ series, anomalies, activeAnomaly, onPickAn
       <div className="legend">
         <span><i className="dotmark" style={{ background: '#23241f' }} /> наблюдения со снимков</span>
         <span><i style={{ borderTopColor: '#3f7d4e' }} /> восстановленный ряд</span>
-        {hasBand && <span><i className="band" style={{ background: 'rgba(63,125,78,0.16)' }} /> норма ±2σ</span>}
+        {hasBand && <span><i className="band" style={{ background: 'rgba(63,125,78,0.16)' }} /> норма ±2σ, апрель—октябрь</span>}
         <span><i className="band" style={{ background: SEVERITY.suppression.soft }} /> угнетение</span>
         <span><i className="band" style={{ background: SEVERITY.critical.soft }} /> критическая аномалия</span>
       </div>
 
       <ResponsiveContainer width="100%" height={320}>
-        <ComposedChart data={data} margin={{ top: 8, right: 12, bottom: 4, left: -18 }}>
+        <ComposedChart data={data} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
           <CartesianGrid stroke="#e8e5df" vertical={false} />
           <XAxis
             dataKey="t"
@@ -77,10 +97,15 @@ export default function SeriesChart({ series, anomalies, activeAnomaly, onPickAn
             minTickGap={40}
           />
           <YAxis
-            domain={[0, 1]}
+            domain={[NDVI_MIN, NDVI_MAX]}
+            // Без allowDataOverflow полоса нормы растягивает шкалу за свои
+            // пределы, и на оси появляются подписи вроде 1,49 и −0,000006.
+            allowDataOverflow
+            tickFormatter={(v) => v.toFixed(1)}
             tick={{ fontSize: 11, fill: '#6d6c64' }}
             stroke="#cfcabf"
             tickCount={6}
+            width={34}
           />
 
           {/* Периоды рисуются под рядом, чтобы не закрывать его. */}

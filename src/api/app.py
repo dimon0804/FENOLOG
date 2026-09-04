@@ -210,7 +210,13 @@ def analyze_geometry(request: AnalyzeRequest) -> dict:
 
     polygon = None
     if request.save:
-        polygon = store.create(geometry, name=request.name, crop_type=request.crop_type)
+        polygon = store.create(
+            geometry,
+            name=request.name,
+            crop_type=request.crop_type,
+            source=request.source,
+            external_id=request.external_id,
+        )
 
     task = manager.submit(
         geometry,
