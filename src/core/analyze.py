@@ -6,6 +6,8 @@
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 from datetime import date, timedelta
 
 import numpy as np
@@ -36,6 +38,7 @@ except ImportError:  # pragma: no cover
 # Готовая норма по культуре, если её кто-то загрузил и положил сюда.
 # Слой API вызывает set_crop_climatology() один раз при старте.
 _CROP_CLIM = None
+_AUTOLOAD_TRIED = False
 
 
 def set_crop_climatology(model) -> None:
@@ -49,6 +52,27 @@ def set_crop_climatology(model) -> None:
     _CROP_CLIM = model
 
 
+def _autoload_crop_climatology():
+    """Одна попытка подобрать норму по культуре из models/, дальше не пробуем.
+
+    Отрицательный результат кэшируется: если файла нет, незачем стучаться в
+    файловую систему на каждом полигоне.
+    """
+    global _CROP_CLIM, _AUTOLOAD_TRIED
+    if _AUTOLOAD_TRIED or CropClimatology is None:
+        return _CROP_CLIM
+    _AUTOLOAD_TRIED = True
+    path = Path(__file__).resolve().parents[2] / "models" / "crop_climatology.json"
+    if not path.exists():
+        return None
+    try:
+        _CROP_CLIM = CropClimatology.load(path)
+    except Exception:
+        # Запасной путь не имеет права ронять основной сценарий анализа
+        _CROP_CLIM = None
+    return _CROP_CLIM
+
+
 def _crop_norm(crop_type: str | None, doys: np.ndarray):
     """Пробует получить норму по культуре. Возвращает None, если её нет.
 
@@ -56,6 +80,12 @@ def _crop_norm(crop_type: str | None, doys: np.ndarray):
     у культуры нет нормы. Во всех случаях ядро продолжает работать без z-оценки.
     """
     model = _CROP_CLIM
+    if model is None:
+        # Ленивая загрузка из models/. Без неё ядро молчит на 59 полигонах из 78
+        # только потому, что вызывающая сторона забыла вызвать set_crop_climatology.
+        # Явная установка модели по-прежнему имеет приоритет: она выполняется
+        # раньше и сюда мы уже не попадём.
+        model = _autoload_crop_climatology()
     if model is None:
         return None
     try:
