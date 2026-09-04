@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd
 
 from src.ml.dataset import build_views, load_frame, TRAIN_PATH
-from src.ml.holdout import HoldoutPoint, _neighbour_distances
+from src.ml.holdout import SEED, HoldoutPoint, _neighbour_distances
 from src.ml.registry import REGISTRY, discover
 
 # Значение-заглушка на случай, если у полигона вообще нет известных наблюдений
@@ -65,6 +65,40 @@ def build_targets(df: pd.DataFrame) -> list[HoldoutPoint]:
     return points
 
 
+def _stateless_predictions(points: list, views: dict, context: dict) -> pd.DataFrame:
+    """Предсказания всех методов без обучения — они же признаки для надстроек.
+
+    Тот же порядок и те же ключи, что в src/ml/validate.evaluate: обучаемый метод
+    должен увидеть на инференсе ровно ту таблицу признаков, на которой учился.
+    """
+    preds: dict[str, np.ndarray] = {}
+    for spec in REGISTRY.values():
+        method = spec.factory()
+        if method.needs_fit:
+            continue
+        preds[spec.name] = method.predict_points(points, views, context)
+    return pd.DataFrame(preds)
+
+
+def _fit_on_local_holdout(method, seed: int = SEED):
+    """Обучает метод на локальном контрольном наборе целиком.
+
+    Фолды GroupKFold нужны для честной ОЦЕНКИ: там модель не должна видеть поле,
+    на котором её проверяют. Для боевой модели ограничение снимается — она обязана
+    использовать все размеченные точки, какие есть. Число деревьев при этом берётся
+    то, что подобрала ранняя остановка внутри самого метода.
+    """
+    from src.ml.validate import prepare
+
+    df_v, masked, views_v, points_v, _templates, _hidden = prepare(
+        use_train=True, hide_frac=0.20, seed=seed)
+    context = {"df": masked, "raw": df_v, "points": points_v}
+    context["base_preds"] = _stateless_predictions(points_v, views_v, context)
+    context["train_mask"] = np.ones(len(points_v), dtype=bool)
+    method.fit(views_v, points_v, context)
+    return len(points_v)
+
+
 def build_submission(df: pd.DataFrame, method_key: str = DEFAULT_METHOD) -> pd.DataFrame:
     """Восстанавливает все контрольные точки выбранным методом из реестра."""
     discover()
@@ -79,12 +113,22 @@ def build_submission(df: pd.DataFrame, method_key: str = DEFAULT_METHOD) -> pd.D
         return pd.DataFrame(columns=["anon_polygon_id", "date", "primary_ndvi_pred"])
 
     method = REGISTRY[method_key].factory()
+    context: dict = {"df": df, "points": points}
+
     if method.needs_fit:
-        raise SystemExit(
-            f"метод {method_key!r} требует обучения; обучаемые методы подаются через "
-            f"свою точку входа, а не через batch_infer"
-        )
-    preds = method.predict_points(points, views, {"df": df})
+        # Обучаемый метод: сначала учим на локальном контрольном наборе, где есть
+        # ответы, потом считаем признаки уже по боевым точкам и предсказываем.
+        n_train = _fit_on_local_holdout(method)
+        print(f"Метод обучаемый: обучен на {n_train} точках локального контроля")
+        context["base_preds"] = _stateless_predictions(points, views, context)
+        if not hasattr(method, "predict_external"):
+            raise SystemExit(
+                f"метод {method_key!r} обучаемый, но не умеет считать признаки для точек "
+                f"вне контрольного набора: нужен predict_external(points, views, context)"
+            )
+        preds = method.predict_external(points, views, context)
+    else:
+        preds = method.predict_points(points, views, context)
 
     # Страховка: ни одного пропуска и ни одного значения вне диапазона NDVI
     preds = np.asarray(preds, dtype=float)
