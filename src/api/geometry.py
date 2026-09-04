@@ -145,14 +145,19 @@ def _ring_area_m2(ring) -> float:
     return abs(area) / 2.0
 
 
+def _ha(value: float) -> str:
+    """Гектары с пробелом между разрядами — так число читается с одного взгляда."""
+    return f"{value:,.0f}".replace(",", " ")
+
+
 def validate_for_analysis(geometry: dict) -> dict:
     """Полная проверка контура перед постановкой задачи на анализ."""
     geometry = normalize_geometry(geometry)
     area = area_ha(geometry)
     if area > MAX_AREA_HA:
         raise GeometryError(
-            f"Контур слишком велик: {area:,.0f} га при пределе {MAX_AREA_HA:,.0f} га. "
-            "Выделите отдельное поле, а не весь район".replace(",", " ")
+            f"Контур слишком велик: {_ha(area)} га при пределе {_ha(MAX_AREA_HA)} га. "
+            "Выделите отдельное поле, а не весь район"
         )
     if area < MIN_AREA_HA:
         raise GeometryError(
