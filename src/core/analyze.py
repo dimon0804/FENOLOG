@@ -16,6 +16,7 @@ import pandas as pd
 from src.contracts import AnalysisResult, SeriesInput, SeriesPoint
 from src.core.anomaly import build_periods
 from src.core.climatology import (
+    MIN_STD,
     fit_climatology_loo,
     has_enough_history,
     lookup_norm,
@@ -25,6 +26,10 @@ from src.core.restore import restore_on_grid
 
 # Шаг выдачи итогового ряда наружу: посуточно график слишком тяжёлый для фронтенда
 OUTPUT_STEP_DAYS = 1
+# Потолок модуля z-оценки, см. пояснение в месте применения
+Z_LIMIT = 8.0
+# Вегетационный сезон (месяцы включительно): вне его события не ищутся
+SEASON_MONTHS = (4, 10)
 
 # Норма по типу культуры — запасной путь для полей без собственной истории.
 # Модуль делается параллельно, поэтому импорт мягкий: пока файла нет, ядро
@@ -143,7 +148,7 @@ def analyze(inp: SeriesInput, output_step: int = OUTPUT_STEP_DAYS) -> AnalysisRe
         crop = _crop_norm(inp.crop_type, doys)
         if crop is not None:
             clim_mean, clim_std = crop
-            clim_std = np.where(np.isfinite(clim_std) & (clim_std > 0.02), clim_std, 0.02)
+            clim_std = np.where(np.isfinite(clim_std) & (clim_std > MIN_STD), clim_std, MIN_STD)
             clim_kind = "crop"
             clim_years = 0
         else:
@@ -157,6 +162,24 @@ def analyze(inp: SeriesInput, output_step: int = OUTPUT_STEP_DAYS) -> AnalysisRe
         if clim_kind != "none"
         else np.full(len(grid), np.nan)
     )
+    # Потолок на модуль z-оценки. Отклонение больше восьми сигм на природных
+    # данных означает не рекордную аномалию, а негодную норму: слишком короткая
+    # история, смена культуры или дыра в наблюдениях. Ограничение не прячет
+    # событие — оно остаётся критическим, — но убирает из интерфейса дикие
+    # формулировки вида «падение на 22 стандартных отклонения».
+    z = np.clip(z, -Z_LIMIT, Z_LIMIT)
+
+    # Периоды угнетения ищутся только в вегетационный сезон. Вне его низкий
+    # индекс — это снег, голая почва и растительные остатки, а не состояние
+    # посева: спутниковый слой маскирует снег, поэтому зимние значения ряда
+    # почти целиком экстраполяция. Организаторы по той же причине ограничили
+    # свой набор апрелем-октябрём. Без этого фильтра сервис объявлял
+    # критическую аномалию в январе — на поле, где просто лежал снег.
+    #
+    # Сам ряд и z-оценка за зиму остаются в ответе: график должен быть
+    # непрерывным, скрывается только поиск событий.
+    season = np.array([SEASON_MONTHS[0] <= d.month <= SEASON_MONTHS[1] for d in grid_dates])
+    z_for_search = np.where(season, z, np.nan)
 
     observed_map = dict(zip(df["date"].dt.date, df["ndvi"]))
     source_map = dict(zip(df["date"].dt.date, df["source"]))
@@ -184,7 +207,7 @@ def analyze(inp: SeriesInput, output_step: int = OUTPUT_STEP_DAYS) -> AnalysisRe
 
     anomalies = build_periods(
         grid_dates,
-        z,
+        z_for_search,
         inp.weather,
         crop_type=inp.crop_type,
         norm_is_crop=(clim_kind == "crop"),
