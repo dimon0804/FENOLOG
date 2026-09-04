@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+data/cache/
+data/raw/
+models/*.pkl
+models/*.joblib
+node_modules/
+web/dist/
+.DS_Store
+.idea/
+.vscode/
+submission*.csv

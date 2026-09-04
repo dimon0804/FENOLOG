@@ -1,0 +1,19 @@
+# Ядро расчёта
+numpy>=1.26
+pandas>=2.2
+scipy>=1.13
+scikit-learn>=1.5
+lightgbm>=4.3
+
+# Сервис
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.8
+
+# Геоданные и провайдеры
+shapely>=2.0
+geopandas>=1.0
+pystac-client>=0.8
+odc-stac>=0.3
+rioxarray>=0.17
+requests>=2.32
