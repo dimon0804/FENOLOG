@@ -144,8 +144,8 @@ def lookup_norm(
         # по всем годам: leave-one-out тут вырождается в обычную норму.
         fallback = clim.groupby(level="doy")[["mean", "std"]].mean()
         got = clim.reindex(key)
-        mean = got["mean"].to_numpy()
-        std = got["std"].to_numpy()
+        mean = got["mean"].to_numpy(dtype=float, copy=True)
+        std = got["std"].to_numpy(dtype=float, copy=True)
         miss = ~np.isfinite(mean)
         if miss.any():
             fb = fallback.reindex(np.asarray(doys)[miss])

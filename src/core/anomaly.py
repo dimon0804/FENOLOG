@@ -219,6 +219,8 @@ def build_periods(
     dates: list[date],
     z: np.ndarray,
     weather: list[WeatherPoint],
+    crop_type: str | None = None,
+    norm_is_crop: bool = False,
 ) -> list[AnomalyPeriod]:
     """Полный проход: находит периоды и объясняет каждый."""
     out: list[AnomalyPeriod] = []
