@@ -49,6 +49,15 @@ try:  # pragma: no cover
 except ImportError:  # pragma: no cover
     explain_with_agro = None  # type: ignore
 
+# Прогноз развития поля вперёд. Заказчик кейса сформулировал прямо: «прогнозы
+# должна давать программа». Модуль опирается на климатическую норму и переносит
+# текущее отклонение с затуханием; полезный горизонт около 30 дней, дальше
+# прогноз сходится к норме — это измерено ретроспективно, а не предположено.
+try:  # pragma: no cover
+    from src.core.forecast import forecast_season  # type: ignore
+except ImportError:  # pragma: no cover
+    forecast_season = None  # type: ignore
+
 # Готовая норма по культуре, если её кто-то загрузил и положил сюда.
 # Слой API вызывает set_crop_climatology() один раз при старте.
 _CROP_CLIM = None
@@ -166,12 +175,17 @@ def _apply_agro_journal(anomalies, agro_events, crop_type) -> None:
 
 
 def analyze(inp: SeriesInput, output_step: int = OUTPUT_STEP_DAYS,
-            agro_events: list | None = None) -> AnalysisResult:
+            agro_events: list | None = None,
+            forecast_days: int = 30) -> AnalysisResult:
     """Собирает ряд, восстанавливает пропуски, считает норму и находит аномалии.
 
     agro_events — журнал работ по полю (список AgroEvent из src/core/agrolog.py).
     Необязательный: контракт SeriesInput заморожен, поэтому журнал приходит
     отдельным аргументом, и старый вызов analyze(inp) работает как раньше.
+
+    forecast_days — горизонт прогноза. По умолчанию 30, а не 60: ретроспектива
+    показала, что дальше тридцати дней прогноз сходится к климатической норме
+    и перестаёт нести собственное знание о поле.
     """
     obs = [o for o in inp.observations if o.ndvi is not None and np.isfinite(o.ndvi)]
     if not obs:
@@ -280,6 +294,22 @@ def analyze(inp: SeriesInput, output_step: int = OUTPUT_STEP_DAYS,
 
     _apply_agro_journal(anomalies, agro_events, inp.crop_type)
 
+    # Прогноз кладём в meta, а не в отдельное поле результата: контракт
+    # AnalysisResult заморожен, а meta для того и существует. Слой API отдаёт
+    # его как есть, интерфейс рисует пунктиром продолжение кривой.
+    forecast = None
+    if forecast_season is not None and clim_kind != "none":
+        try:
+            forecast = forecast_season(
+                grid_dates, restored, clim_mean, clim_std,
+                crop_type=inp.crop_type, horizon_days=forecast_days,
+                n_reference_years=clim_years or None,
+                clim_source=clim_kind,
+                last_observation=max(observed_map) if observed_map else None,
+            )
+        except Exception:  # noqa: BLE001 — прогноз не имеет права ронять анализ
+            forecast = None
+
     return AnalysisResult(
         polygon_id=inp.polygon_id,
         series=series,
@@ -296,5 +326,9 @@ def analyze(inp: SeriesInput, output_step: int = OUTPUT_STEP_DAYS,
             # "none" — нормы нет, аномалии не ищутся.
             "climatology_source": clim_kind,
             "crop_type": inp.crop_type,
+            # Прогноз развития поля вперёд от последней даты ряда. None, если
+            # нормы нет или модуль прогноза недоступен — интерфейс тогда просто
+            # не рисует продолжение кривой.
+            "forecast": forecast,
         },
     )
