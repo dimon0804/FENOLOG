@@ -136,6 +136,8 @@ export default function App() {
         geometry: draft.geometry,
         crop_type: draft.crop_type,
         name: draft.name || null,
+        source: draft.source,
+        external_id: draft.external_id,
         save,
       })
       if (response.polygon) {
@@ -158,7 +160,12 @@ export default function App() {
     setFlyTo({ bbox: bboxOf(polygon.geometry), at: Date.now() })
     // Прошлый анализ показывается сразу и без сети до самого конца: возвращаться
     // к полю и каждый раз ждать минуту сбора — ровно то, ради чего результат и
-    // кладётся на диск.
+    // кладётся на диск. У поля, которое ещё не считали, результата заведомо нет —
+    // не спрашиваем, чтобы не сорить четырёхсотыми в консоли.
+    if (!polygon.last_analyzed_at) {
+      setResult(null)
+      return
+    }
     try {
       const saved = await api.savedResult(polygon.id)
       setResult(saved.result)

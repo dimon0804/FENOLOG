@@ -28,6 +28,11 @@ class AnalyzeRequest(BaseModel):
     # Имя нужно, только если контур сразу сохраняется в список участков.
     name: str | None = None
     save: bool = False
+    # Откуда контур: нарисован пользователем или выбран из найденных в OSM.
+    # Едет вместе с запросом, потому что при save=True участок заводится прямо
+    # здесь, и иначе контур из OpenStreetMap оказался бы записан как «нарисован».
+    source: str = "drawn"
+    external_id: str | None = None
 
 
 class PolygonCreate(BaseModel):
