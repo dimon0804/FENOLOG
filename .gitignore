@@ -22,3 +22,4 @@ docs/
 # Состояние сервиса: сохранённые пользователем полигоны
 data/polygons.json
 data/polygons.*.json
+data/results/
