@@ -58,6 +58,16 @@ try:  # pragma: no cover
 except ImportError:  # pragma: no cover
     forecast_season = None  # type: ignore
 
+# Оценка поля как объекта риска — для страховой и банка, кредитующего хозяйство.
+# Заказчик кейса назвал их покупателем прямо: «создаём источник независимых
+# данных и оценки». Балл собирается из устойчивости год к году, стрессовой
+# нагрузки, продуктивности и тренда; веса расставлены по прогнозной проверке,
+# а не на глаз.
+try:  # pragma: no cover
+    from src.core.scoring import field_score  # type: ignore
+except ImportError:  # pragma: no cover
+    field_score = None  # type: ignore
+
 # Готовая норма по культуре, если её кто-то загрузил и положил сюда.
 # Слой API вызывает set_crop_climatology() один раз при старте.
 _CROP_CLIM = None
@@ -310,6 +320,17 @@ def analyze(inp: SeriesInput, output_step: int = OUTPUT_STEP_DAYS,
         except Exception:  # noqa: BLE001 — прогноз не имеет права ронять анализ
             forecast = None
 
+    score = None
+    if field_score is not None and clim_kind != "none":
+        try:
+            score = field_score(
+                grid_dates, restored, clim_mean, clim_std, z, anomalies,
+                crop_type=inp.crop_type, climatology_source=clim_kind,
+                observed=observed_flags,
+            )
+        except Exception:  # noqa: BLE001 — оценка не имеет права ронять анализ
+            score = None
+
     return AnalysisResult(
         polygon_id=inp.polygon_id,
         series=series,
@@ -330,5 +351,8 @@ def analyze(inp: SeriesInput, output_step: int = OUTPUT_STEP_DAYS,
             # нормы нет или модуль прогноза недоступен — интерфейс тогда просто
             # не рисует продолжение кривой.
             "forecast": forecast,
+            # Оценка поля как объекта риска: балл 0..100, буква, разбор по
+            # сезонам и честные оговорки в flags. None, если нормы нет.
+            "score": score,
         },
     )
