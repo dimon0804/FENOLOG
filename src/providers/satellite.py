@@ -32,9 +32,11 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Callable, Iterable, Sequence
 
@@ -52,17 +54,25 @@ log = logging.getLogger(__name__)
 # лежат рядом, отдаются как COG и не требуют регистрации. Copernicus Data Space и
 # AWS Element84 держим как запасные (см. STAC_FALLBACKS) — у них другие имена ассетов,
 # поэтому все обращения к ассетам идут через словари синонимов ниже.
-STAC_URL = "https://planetarycomputer.microsoft.com/api/stac/v1"
-STAC_FALLBACKS = ("https://earth-search.aws.element84.com/v1",)
+# --------------------------------------------------------------------------------------
+# Реестр источников
+#
+# Заказчик кейса просил Европейское космическое агентство (Copernicus Data Space) и
+# Google Earth Engine. GEE отпадает по инфраструктуре: он требует собственного проекта
+# в Google Cloud и аутентификации под аккаунтом владельца, ключ в репозиторий не
+# положишь. Остальные три каталога проверены руками, и результат проверки записан в
+# поле `note` каждого источника — это не предположения, а наблюдённые коды ответов.
+# --------------------------------------------------------------------------------------
 
-COLLECTION_S2 = "sentinel-2-l2a"
-COLLECTION_LANDSAT = "landsat-c2-l2"
-COLLECTION_MODIS = "modis-13Q1-061"
+# Ключи сенсоров, которыми оперирует весь модуль.
+SENSOR_S2 = "s2"
+SENSOR_LANDSAT = "landsat"
+SENSOR_MODIS = "modis"
 
 # Приоритет сенсоров при склейке одной даты. Ровно так собран `primary_ndvi`
 # в наборе организаторов (проверено: при наличии s2_ndvi он совпадает точно),
 # и доменное ядро взвешивает наблюдения по этой же шкале 1 / 0,8 / 0,5.
-SOURCE_PRIORITY = {"s2": 0, "landsat": 1, "modis": 2}
+SOURCE_PRIORITY = {SENSOR_S2: 0, SENSOR_LANDSAT: 1, SENSOR_MODIS: 2}
 
 # Порог годности сцены: доля незамаскированных пикселей внутри контура.
 # Меньше — значит поле закрыто облаком почти целиком, и медиана по остатку
@@ -103,28 +113,6 @@ GDAL_ENV = {
     "VSI_CACHE_SIZE": "33554432",
 }
 
-# Синонимы ассетов: Planetary Computer называет каналы Sentinel-2 как B04/B08,
-# Element84 — red/nir. Перебираем варианты, чтобы код пережил смену каталога.
-S2_ASSETS = {
-    "red": ("red", "B04"),
-    "nir": ("nir", "B08"),
-    "blue": ("blue", "B02"),
-    "green": ("green", "B03"),
-    "scl": ("SCL", "scl"),
-}
-LANDSAT_ASSETS = {
-    "red": ("red",),
-    "nir": ("nir08", "nir"),
-    "blue": ("blue",),
-    "green": ("green",),
-    "qa": ("qa_pixel",),
-}
-MODIS_ASSETS = {
-    "ndvi": ("250m_16_days_NDVI",),
-    "evi": ("250m_16_days_EVI",),
-    "qa": ("250m_16_days_pixel_reliability",),
-}
-
 # Классы Scene Classification Layer у Sentinel-2 L2A, которые нельзя пускать в медиану.
 # 0 — нет данных, 1 — насыщение/дефект, 3 — тень облака, 8/9 — облако средней и высокой
 # вероятности, 10 — перистые, 11 — снег. Снег добавлен к обязательному списку намеренно:
@@ -145,6 +133,132 @@ LANDSAT_QA_BITS = (0, 1, 2, 3, 4, 5)
 # 2 — снег/лёд, 3 — облако, -1 — заполнитель. Берём только 0 и 1.
 MODIS_RELIABILITY_OK = (0, 1)
 
+# Имена ассетов у трёх каталогов разные, и это единственное, что реально мешает
+# переключаться между ними. Planetary Computer зовёт каналы B04 / SCL, Element84 —
+# red / scl, Copernicus — B04_10m / SCL_20m. Держим все синонимы одним списком и
+# берём первый подошедший: тогда один и тот же код читает любой каталог.
+S2_ASSETS = {
+    "red": ("red", "B04", "B04_10m"),
+    "nir": ("nir", "B08", "B08_10m"),
+    "blue": ("blue", "B02", "B02_10m"),
+    "green": ("green", "B03", "B03_10m"),
+    "scl": ("SCL", "scl", "SCL_20m"),
+}
+LANDSAT_ASSETS = {
+    "red": ("red",),
+    "nir": ("nir08", "nir"),
+    "blue": ("blue",),
+    "green": ("green",),
+    "qa": ("qa_pixel",),
+}
+MODIS_ASSETS = {
+    "ndvi": ("250m_16_days_NDVI",),
+    "evi": ("250m_16_days_EVI",),
+    "qa": ("250m_16_days_pixel_reliability",),
+}
+
+# Переключатель источника: auto | pc | cdse | element84.
+ENV_SOURCE = "FENOLOG_SATELLITE_SOURCE"
+
+# Учётные данные Copernicus. Каталог открыт, пиксели — нет (см. заметку у _CDSE),
+# поэтому источник включается только при одном из двух наборов переменных.
+ENV_CDSE_S3_KEY = "CDSE_S3_ACCESS_KEY"
+ENV_CDSE_S3_SECRET = "CDSE_S3_SECRET_KEY"
+ENV_CDSE_USER = "CDSE_USERNAME"
+ENV_CDSE_PASSWORD = "CDSE_PASSWORD"
+
+CDSE_TOKEN_URL = ("https://identity.dataspace.copernicus.eu/auth/realms/CDSE"
+                  "/protocol/openid-connect/token")
+CDSE_S3_ENDPOINT = "eodata.dataspace.copernicus.eu"
+
+
+@dataclass
+class _Source:
+    """Описание одного STAC-каталога: где искать, как называются ассеты, чем платить.
+
+    Всё, чем каталоги отличаются друг от друга, собрано здесь. Остальной код
+    источник не различает и работает только через это описание — именно поэтому
+    добавление четвёртого каталога не потребует правок в чтении и маскировании.
+    """
+    key: str
+    title: str
+    stac_url: str
+    collections: dict          # сенсор -> id коллекции в этом каталоге
+    note: str                  # результат ручной проверки доступа, для отчёта и логов
+    needs_key: bool = False    # пиксели закрыты авторизацией
+    prefer_alternate_https: bool = False  # ассет отдаёт s3://, ссылка лежит в alternate
+
+    def sensor_of(self, item: Any) -> str | None:
+        """Обратное отображение: id коллекции сцены -> ключ сенсора."""
+        cid = getattr(item, "collection_id", "") or ""
+        for sensor, name in self.collections.items():
+            if cid == name:
+                return sensor
+        # Запасной разбор по имени: у каталогов встречаются варианты вроде
+        # "sentinel-2-c1-l2a", которые в явной таблице не перечислить.
+        low = cid.lower()
+        if "sentinel-2" in low:
+            return SENSOR_S2
+        if "landsat" in low:
+            return SENSOR_LANDSAT
+        if "13q1" in low or "modis" in low:
+            return SENSOR_MODIS
+        return None
+
+
+# Planetary Computer — основной. Три сенсора, всё в COG, подпись бесплатная и без
+# регистрации. За всё время проверок ни разу не отказал.
+_PC = _Source(
+    key="pc",
+    title="Microsoft Planetary Computer",
+    stac_url="https://planetarycomputer.microsoft.com/api/stac/v1",
+    collections={SENSOR_S2: "sentinel-2-l2a",
+                 SENSOR_LANDSAT: "landsat-c2-l2",
+                 SENSOR_MODIS: "modis-13Q1-061"},
+    note="открыт полностью: и поиск, и пиксели, без регистрации, все три сенсора",
+)
+
+# Copernicus Data Space Ecosystem — портал ЕКА, тот самый источник из просьбы заказчика.
+# Каталог открыт (поиск отвечает за 1,3 с), но КАЖДЫЙ ассет с пикселями закрыт:
+#   - основной href это s3://eodata/..., "auth:refs": ["s3"] — нужен ключ объектного
+#     хранилища CDSE, GDAL без него отвечает InvalidCredentials;
+#   - alternate.https на zipper.dataspace.copernicus.eu помечен "auth:refs": ["oidc"] и
+#     без токена отдаёт HTTP 401 {"code":"DAT-ZIP-604","message":"Token not found"};
+#   - OData-ссылка Products(...)/$value — тот же 401.
+# Плюс данные там лежат в SAFE/JPEG2000, а не в COG: даже с ключом чтение окна будет
+# заметно дороже, чем у двух других каталогов.
+# Поэтому источник включается только при заданных учётных данных, а без них честно
+# сообщает «требует ключа» и уступает очередь следующему каталогу.
+# Landsat здесь только Level-1 (сырые DN без атмосферной коррекции) — другой уровень
+# обработки, к Level-2 несопоставим, поэтому не подключён.
+_CDSE = _Source(
+    key="cdse",
+    title="Copernicus Data Space Ecosystem (ЕКА)",
+    stac_url="https://catalogue.dataspace.copernicus.eu/stac",
+    collections={SENSOR_S2: "sentinel-2-l2a"},
+    note=("каталог открыт, пиксели требуют ключа: s3 -> InvalidCredentials, "
+          "https -> 401 DAT-ZIP-604 'Token not found'"),
+    needs_key=True,
+    prefer_alternate_https=True,
+)
+
+# AWS Element84 — открытая витрина тех же продуктов ЕКА, перепакованных в COG.
+# Sentinel-2 читается без ключей (проверено), а Landsat лежит в requester-pays бакете
+# usgs-landsat и без ключей AWS не открывается, поэтому не подключён.
+_ELEMENT84 = _Source(
+    key="element84",
+    title="AWS Element84 Earth Search",
+    stac_url="https://earth-search.aws.element84.com/v1",
+    collections={SENSOR_S2: "sentinel-2-l2a"},
+    note="Sentinel-2 открыт без ключей; Landsat в requester-pays бакете, не подключён",
+)
+
+SOURCES = {src.key: src for src in (_PC, _CDSE, _ELEMENT84)}
+
+# Порядок автоматического перебора: сначала полный каталог, затем ЕКА (если дали ключ),
+# затем открытая витрина тех же данных.
+SOURCE_ORDER = ("pc", "cdse", "element84")
+
 ProgressFn = Callable[[str, int, int], None]
 
 
@@ -158,6 +272,7 @@ def fetch_observations(
     end: date,
     progress: ProgressFn | None = None,
     max_scenes: int | None = None,
+    source: str | None = None,
 ) -> list[Observation]:
     """Наблюдения NDVI по контуру, отсортированные по дате.
 
@@ -166,6 +281,10 @@ def fetch_observations(
     max_scenes— ограничение числа сцен для быстрой демонстрации; сцены при этом
                 прореживаются равномерно по времени, чтобы сезонная кривая
                 осталась узнаваемой, а не обрезалась по началу периода.
+    source    — принудительный выбор каталога: "pc" | "cdse" | "element84" | "auto".
+                По умолчанию берётся переменная окружения FENOLOG_SATELLITE_SOURCE,
+                а если и её нет — "auto": каталоги перебираются по SOURCE_ORDER,
+                пока какой-нибудь не отдаст наблюдения.
 
     Никогда не бросает исключений: при полном отказе источников возвращает [].
     """
@@ -180,12 +299,51 @@ def fetch_observations(
         log.error("satellite: пустая геометрия")
         return []
 
-    bbox = tuple(shape.bounds)
-    _emit(progress, "ищу сцены", 0, 1)
+    chain = _resolve_sources(source)
+    if not chain:
+        log.error("satellite: не осталось ни одного пригодного источника")
+        return []
 
-    items = _search_all(bbox, start, end)
+    # Перебор источников до первого, который реально отдал наблюдения. Пустой ответ
+    # приравнивается к отказу: каталог может быть жив, но не покрывать эту территорию
+    # (у Element84, например, нет Landsat), и тогда честнее пойти дальше по цепочке,
+    # чем возвращать пользователю пустой график при живом запасном источнике.
+    for attempt, src in enumerate(chain, 1):
+        ok, reason = _source_ready(src)
+        if not ok:
+            log.warning("satellite: источник %s пропущен — %s", src.title, reason)
+            continue
+        log.info("satellite: источник %s (%d из %d)", src.title, attempt, len(chain))
+        observations = _collect_from_source(shape, start, end, progress, max_scenes, src)
+        if observations:
+            log.info(
+                "satellite: %d наблюдений из %s за %.1f с",
+                len(observations), src.title, time.perf_counter() - t0,
+            )
+            return observations
+        log.warning("satellite: источник %s не дал наблюдений, перехожу к следующему",
+                    src.title)
+
+    log.warning("satellite: ни один источник не дал наблюдений за %s..%s", start, end)
+    return []
+
+
+def _collect_from_source(
+    shape,
+    start: date,
+    end: date,
+    progress: ProgressFn | None,
+    max_scenes: int | None,
+    src: _Source,
+) -> list[Observation]:
+    """Полный цикл сбора по одному каталогу. Наружу исключений не выпускает."""
+    _emit(progress, "ищу сцены", 0, 1)
+    try:
+        items = _search_all(tuple(shape.bounds), start, end, src)
+    except Exception as exc:
+        log.warning("satellite: поиск в %s не удался: %s", src.title, exc)
+        return []
     if not items:
-        log.warning("satellite: сцен не найдено за %s..%s", start, end)
         _emit(progress, "скачиваю сцены", 0, 0)
         return []
 
@@ -201,7 +359,7 @@ def fetch_observations(
     # Параллелим по сценам: каждая сцена — независимая пачка range-запросов,
     # ошибка одной не должна касаться остальных.
     with ThreadPoolExecutor(max_workers=DOWNLOAD_WORKERS) as pool:
-        futures = {pool.submit(_process_item, it, shape): it for it in items}
+        futures = {pool.submit(_process_item, it, shape, src): it for it in items}
         try:
             for fut in as_completed(futures, timeout=TOTAL_TIMEOUT_S):
                 item = futures[fut]
@@ -226,39 +384,201 @@ def fetch_observations(
     # 16-дневный композит MODIS может начинаться до `start` и заканчиваться после `end`:
     # STAC отдаёт его по пересечению интервалов. Обрезаем ряд запрошенным периодом,
     # иначе ядро получит наблюдения за пределами окна анализа.
-    observations = [o for o in _merge_by_date(collected) if start <= o.date <= end]
-    log.info(
-        "satellite: %d наблюдений из %d сцен за %.1f с",
-        len(observations), total, time.perf_counter() - t0,
-    )
-    return observations
+    return [o for o in _merge_by_date(collected) if start <= o.date <= end]
 
 
-class PlanetaryComputerSatelliteProvider:
+# --------------------------------------------------------------------------------------
+# Выбор источника и учётные данные
+# --------------------------------------------------------------------------------------
+
+def _resolve_sources(source: str | None) -> list[_Source]:
+    """Во что превращается запрошенный источник: список каталогов в порядке перебора.
+
+    Явно названный каталог — это именно он и только он: если пользователь выбрал ЕКА,
+    подсовывать ему молча другие данные нельзя, он их выбирал осознанно. Молчаливая
+    подмена источника — это как раз то, из-за чего потом невозможно объяснить, откуда
+    в отчёте взялись числа. Автоматический режим, наоборот, идёт по цепочке.
+    """
+    requested = (source or os.environ.get(ENV_SOURCE) or "auto").strip().lower()
+    if requested in ("auto", "", "any"):
+        return [SOURCES[k] for k in SOURCE_ORDER if k in SOURCES]
+    if requested in SOURCES:
+        return [SOURCES[requested]]
+    log.error("satellite: неизвестный источник %r, известны: %s; беру auto",
+              requested, ", ".join(SOURCES))
+    return [SOURCES[k] for k in SOURCE_ORDER if k in SOURCES]
+
+
+def _cdse_credentials() -> tuple[str, dict]:
+    """Какими учётными данными Copernicus мы располагаем.
+
+    Возвращает ("s3" | "oidc" | "", подробности). Порядок предпочтения — S3: это
+    прямой доступ к объектному хранилищу без промежуточного сервиса выдачи файлов,
+    он и быстрее, и не упирается в срок жизни токена.
+    """
+    key = os.environ.get(ENV_CDSE_S3_KEY)
+    secret = os.environ.get(ENV_CDSE_S3_SECRET)
+    if key and secret:
+        return "s3", {"key": key, "secret": secret}
+    user = os.environ.get(ENV_CDSE_USER)
+    password = os.environ.get(ENV_CDSE_PASSWORD)
+    if user and password:
+        return "oidc", {"user": user, "password": password}
+    return "", {}
+
+
+# Токен Keycloak живёт около 10 минут, а сбор сезона занимает десятки секунд и идёт
+# в несколько потоков. Поэтому держим один токен на процесс под замком и обновляем
+# заранее, за минуту до формального истечения.
+_cdse_token_lock = threading.Lock()
+_cdse_token_value: str | None = None
+_cdse_token_expires: float = 0.0
+
+
+def _cdse_token() -> str | None:
+    """Bearer-токен Copernicus по логину и паролю. None, если не выдали."""
+    global _cdse_token_value, _cdse_token_expires
+    mode, creds = _cdse_credentials()
+    if mode != "oidc":
+        return None
+    with _cdse_token_lock:
+        if _cdse_token_value and time.time() < _cdse_token_expires:
+            return _cdse_token_value
+        try:
+            import requests
+
+            r = requests.post(
+                CDSE_TOKEN_URL,
+                data={
+                    "grant_type": "password",
+                    "username": creds["user"],
+                    "password": creds["password"],
+                    "client_id": "cdse-public",
+                },
+                timeout=20,
+            )
+            if r.status_code != 200:
+                log.error("satellite: Copernicus не выдал токен, HTTP %s: %s",
+                          r.status_code, r.text[:200])
+                return None
+            payload = r.json()
+            _cdse_token_value = payload["access_token"]
+            _cdse_token_expires = time.time() + float(payload.get("expires_in", 600)) - 60
+            log.info("satellite: получен токен Copernicus")
+            return _cdse_token_value
+        except Exception as exc:
+            log.error("satellite: не смог получить токен Copernicus: %s", exc)
+            return None
+
+
+def _source_ready(src: _Source) -> tuple[bool, str]:
+    """Можно ли вообще пытаться читать пиксели из этого каталога.
+
+    Проверка дешёвая и делается ДО поиска: бессмысленно тратить секунды на STAC-запрос,
+    если файлы всё равно не откроются. Сообщение возвращается человеческим текстом —
+    оно уходит в лог и дальше в интерфейс, вместо молчаливого пустого графика.
+    """
+    if not src.needs_key:
+        return True, ""
+    if src.key == "cdse":
+        mode, _ = _cdse_credentials()
+        if mode == "s3":
+            return True, ""
+        if mode == "oidc":
+            return (True, "") if _cdse_token() else (
+                False, f"{src.title}: логин есть, но токен не выдан")
+        return False, (
+            f"{src.title}: источник требует ключа. Каталог открыт, но пиксели закрыты "
+            f"({src.note}). Зарегистрируйтесь на dataspace.copernicus.eu и задайте "
+            f"{ENV_CDSE_S3_KEY}/{ENV_CDSE_S3_SECRET} (ключи S3) либо "
+            f"{ENV_CDSE_USER}/{ENV_CDSE_PASSWORD} (учётная запись)")
+    return True, ""
+
+
+def _source_gdal_env(src: _Source) -> dict:
+    """Настройки GDAL под конкретный каталог: общие плюс то, чем платим за доступ."""
+    env = dict(GDAL_ENV)
+    if src.key != "cdse":
+        return env
+    mode, creds = _cdse_credentials()
+    if mode == "s3":
+        # Хранилище CDSE — S3-совместимое, но не Amazon: нужен свой адрес, выключенный
+        # virtual-hosting (бакет в пути, а не в имени хоста) и фиктивный регион.
+        env.update({
+            "AWS_ACCESS_KEY_ID": creds["key"],
+            "AWS_SECRET_ACCESS_KEY": creds["secret"],
+            "AWS_S3_ENDPOINT": CDSE_S3_ENDPOINT,
+            "AWS_VIRTUAL_HOSTING": "FALSE",
+            "AWS_HTTPS": "YES",
+            "AWS_REGION": "default",
+            "AWS_NO_SIGN_REQUEST": "NO",
+        })
+    elif mode == "oidc":
+        token = _cdse_token()
+        if token:
+            env["GDAL_HTTP_HEADERS"] = f"Authorization: Bearer {token}"
+    return env
+
+
+class StacSatelliteProvider:
     """Обёртка под протокол `src.providers.base.SatelliteProvider`.
 
     Нужна API-слою: он работает со списком провайдеров единообразно и должен уметь
     спросить живость источника до того, как повесит пользователя на минуту ожидания.
+    Один класс на все каталоги — различия целиком описаны объектом _Source.
     """
 
-    name = "planetary-computer"
-
-    def __init__(self, max_scenes: int | None = None) -> None:
+    def __init__(self, source: str = "auto", max_scenes: int | None = None) -> None:
+        self.source = source
         self.max_scenes = max_scenes
+        src = SOURCES.get(source)
+        self.name = src.key if src else "stac-auto"
+        self.title = src.title if src else "автовыбор источника"
 
     def is_available(self) -> bool:
-        """Лёгкая проверка: только корневой документ STAC, без поиска сцен."""
-        try:
-            import requests
+        """Лёгкая проверка: корневой документ STAC плюс наличие ключей, без поиска сцен."""
+        for src in _resolve_sources(self.source):
+            ok, reason = _source_ready(src)
+            if not ok:
+                log.info("satellite: %s недоступен — %s", src.title, reason)
+                continue
+            try:
+                import requests
 
-            r = requests.get(STAC_URL, timeout=8)
-            return r.status_code == 200
-        except Exception as exc:
-            log.warning("satellite: каталог недоступен: %s", exc)
-            return False
+                if requests.get(src.stac_url, timeout=8).status_code == 200:
+                    return True
+            except Exception as exc:
+                log.warning("satellite: каталог %s недоступен: %s", src.title, exc)
+        return False
 
     def fetch(self, geometry: dict, start: date, end: date) -> list[Observation]:
-        return fetch_observations(geometry, start, end, max_scenes=self.max_scenes)
+        return fetch_observations(geometry, start, end,
+                                  max_scenes=self.max_scenes, source=self.source)
+
+
+class PlanetaryComputerSatelliteProvider(StacSatelliteProvider):
+    """Основной источник: три сенсора, без регистрации."""
+
+    def __init__(self, max_scenes: int | None = None) -> None:
+        super().__init__("pc", max_scenes)
+
+
+class CopernicusSatelliteProvider(StacSatelliteProvider):
+    """Источник ЕКА. Работает только при заданных учётных данных Copernicus.
+
+    Без ключа `is_available()` вернёт False с внятной причиной в логе — это осознанно
+    лучше, чем притвориться живым и отдать пустой ряд.
+    """
+
+    def __init__(self, max_scenes: int | None = None) -> None:
+        super().__init__("cdse", max_scenes)
+
+
+class Element84SatelliteProvider(StacSatelliteProvider):
+    """Открытая витрина продуктов ЕКА на AWS. Только Sentinel-2, зато без ключей."""
+
+    def __init__(self, max_scenes: int | None = None) -> None:
+        super().__init__("element84", max_scenes)
 
 
 # --------------------------------------------------------------------------------------
@@ -302,35 +622,30 @@ def _project_shape(shape, dst_crs):
 # Поиск сцен
 # --------------------------------------------------------------------------------------
 
-def _open_catalog():
-    """Открываем STAC-каталог, при отказе основного пробуем запасные."""
+def _open_catalog(src: _Source):
+    """Открываем STAC-каталог конкретного источника."""
     from pystac_client import Client
 
-    last: Exception | None = None
-    for url in (STAC_URL, *STAC_FALLBACKS):
-        try:
-            return Client.open(url), url
-        except Exception as exc:
-            last = exc
-            log.warning("satellite: каталог %s не открылся: %s", url, exc)
-    raise RuntimeError(f"ни один STAC-каталог не доступен: {last}")
+    return Client.open(src.stac_url)
 
 
-def _search_all(bbox: Sequence[float], start: date, end: date) -> list[Any]:
-    """Сцены всех трёх коллекций за период.
+def _search_all(bbox: Sequence[float], start: date, end: date, src: _Source) -> list[Any]:
+    """Сцены всех коллекций источника за период.
 
     Коллекции опрашиваются независимо и каждая в своём try: MODIS может быть
     недоступен, а Sentinel-2 при этом работать — сервис обязан пережить такое.
+    Отдельно ловим 429: Copernicus прикрыт WAF и на пачку быстрых запросов отвечает
+    «Rate limit exceeded», из-за чего часть коллекций молча выпала бы из выдачи.
     """
     try:
-        catalog, url = _open_catalog()
+        catalog = _open_catalog(src)
     except Exception as exc:
-        log.error("satellite: поиск невозможен: %s", exc)
+        log.error("satellite: каталог %s не открылся: %s", src.title, exc)
         return []
 
     period = f"{start.isoformat()}/{end.isoformat()}"
     found: list[Any] = []
-    for collection in (COLLECTION_S2, COLLECTION_LANDSAT, COLLECTION_MODIS):
+    for sensor, collection in src.collections.items():
         try:
             search = catalog.search(
                 collections=[collection],
@@ -339,11 +654,18 @@ def _search_all(bbox: Sequence[float], start: date, end: date) -> list[Any]:
             )
             items = list(search.items())
         except Exception as exc:
-            log.warning("satellite: коллекция %s недоступна (%s): %s", collection, url, exc)
+            detail = str(exc)
+            if "429" in detail or "Rate limit" in detail:
+                log.warning("satellite: %s ограничил частоту запросов на коллекции %s",
+                            src.title, collection)
+            else:
+                log.warning("satellite: коллекция %s недоступна в %s: %s",
+                            collection, src.title, detail[:200])
             continue
 
         kept = [it for it in items if _scene_cloud_ok(it)]
-        log.info("satellite: %s — найдено %d, взято %d", collection, len(items), len(kept))
+        log.info("satellite: %s/%s — найдено %d, взято %d",
+                 src.key, collection, len(items), len(kept))
         found.extend(kept)
     return found
 
@@ -431,25 +753,45 @@ def _safe_id(item: Any) -> str:
 # Чтение окна и маски
 # --------------------------------------------------------------------------------------
 
-def _asset_href(item: Any, names: Iterable[str]) -> str | None:
-    """Ссылка на ассет по первому подошедшему синониму имени, уже подписанная.
+def _asset_href(item: Any, names: Iterable[str], src: _Source) -> str | None:
+    """Ссылка на ассет по первому подошедшему синониму имени, готовая к чтению.
 
-    Подписываем непосредственно перед чтением, а не при поиске: подпись Planetary
-    Computer живёт около часа, а сбор длинного ряда может идти дольше.
+    Три каталога отдают ссылки тремя разными способами:
+      - Planetary Computer — https, но требует подписи; подписываем непосредственно
+        перед чтением, а не при поиске, потому что подпись живёт около часа, а сбор
+        длинного ряда может идти дольше;
+      - Element84 — открытый https, ничего делать не нужно;
+      - Copernicus — основной href это s3://, а пригодная для GDAL https-ссылка
+        спрятана в extra_fields["alternate"]["https"]; при доступе по ключам S3,
+        наоборот, нужен именно s3://.
     """
     for name in names:
         asset = item.assets.get(name)
         if asset is None:
             continue
         href = asset.href
-        try:
-            import planetary_computer as pc
 
-            return pc.sign(href)
-        except Exception:
-            # Не PC-ссылка (Element84 отдаёт открытые URL) или подпись не удалась —
-            # пробуем как есть, хуже уже не будет.
+        if src.prefer_alternate_https:
+            mode, _ = _cdse_credentials()
+            alternate = (asset.extra_fields or {}).get("alternate") or {}
+            https_href = (alternate.get("https") or {}).get("href")
+            # С ключами S3 читаем напрямую из хранилища, с токеном — по https.
+            if mode == "s3" and href.startswith("s3://"):
+                return href
+            if https_href:
+                return https_href
             return href
+
+        if src.key == "pc":
+            try:
+                import planetary_computer as pc
+
+                return pc.sign(href)
+            except Exception as exc:
+                # Подпись не удалась — пробуем как есть, хуже уже не будет.
+                log.debug("satellite: подпись не удалась (%s), читаю без неё", exc)
+                return href
+        return href
     return None
 
 
@@ -604,7 +946,7 @@ def _polygon_mask(grid: dict) -> np.ndarray:
 # Обработка одной сцены
 # --------------------------------------------------------------------------------------
 
-def _process_item(item: Any, shape_wgs84) -> tuple[Observation, int] | None:
+def _process_item(item: Any, shape_wgs84, src: _Source) -> tuple[Observation, int] | None:
     """Сцена -> одно наблюдение (или None).
 
     Возвращает пару (наблюдение, число валидных пикселей): счётчик нужен при склейке,
@@ -613,25 +955,33 @@ def _process_item(item: Any, shape_wgs84) -> tuple[Observation, int] | None:
     """
     import rasterio
 
-    collection = getattr(item, "collection_id", "") or ""
+    sensor = src.sensor_of(item)
     obs_date = _item_date(item)
-    if obs_date is None:
+    if obs_date is None or sensor is None:
+        log.debug("satellite: сцена %s без даты или без сенсора", _safe_id(item))
         return None
 
     try:
-        with rasterio.Env(**GDAL_ENV):
-            if collection.startswith("sentinel-2"):
-                return _process_s2(item, shape_wgs84, obs_date)
-            if collection.startswith("landsat"):
-                return _process_landsat(item, shape_wgs84, obs_date)
-            if "13Q1" in collection or collection.startswith("modis"):
-                return _process_modis(item, shape_wgs84, obs_date)
+        with rasterio.Env(**_source_gdal_env(src)):
+            if sensor == SENSOR_S2:
+                return _process_s2(item, shape_wgs84, obs_date, src)
+            if sensor == SENSOR_LANDSAT:
+                return _process_landsat(item, shape_wgs84, obs_date, src)
+            if sensor == SENSOR_MODIS:
+                return _process_modis(item, shape_wgs84, obs_date, src)
     except Exception as exc:
-        log.warning("satellite: сцена %s пропущена: %s: %s",
-                    _safe_id(item), type(exc).__name__, exc)
+        detail = str(exc)
+        # Отказ по правам разбираем отдельно: это не «битая сцена», а незакрытый
+        # доступ, и пользователю надо сказать именно это.
+        if any(m in detail for m in ("401", "403", "InvalidCredentials",
+                                     "Token not found", "AccessDenied")):
+            log.warning("satellite: %s не отдал пиксели без ключа (%s): %s",
+                        src.title, _safe_id(item), detail[:160])
+        else:
+            log.warning("satellite: сцена %s пропущена: %s: %s",
+                        _safe_id(item), type(exc).__name__, detail[:160])
         return None
 
-    log.debug("satellite: неизвестная коллекция %s", collection)
     return None
 
 
@@ -653,10 +1003,10 @@ def _s2_offset(item: Any) -> float:
         return -1000.0 if d is not None and d >= date(2022, 1, 25) else 0.0
 
 
-def _process_s2(item: Any, shape_wgs84, obs_date: date):
-    red_href = _asset_href(item, S2_ASSETS["red"])
-    scl_href = _asset_href(item, S2_ASSETS["scl"])
-    nir_href = _asset_href(item, S2_ASSETS["nir"])
+def _process_s2(item: Any, shape_wgs84, obs_date: date, src: _Source):
+    red_href = _asset_href(item, S2_ASSETS["red"], src)
+    scl_href = _asset_href(item, S2_ASSETS["scl"], src)
+    nir_href = _asset_href(item, S2_ASSETS["nir"], src)
     if not (red_href and nir_href):
         return None
 
@@ -698,8 +1048,8 @@ def _process_s2(item: Any, shape_wgs84, obs_date: date):
     # EVI и NDWI — «сколько получится»: контракт разрешает None, а лишний отказ
     # из-за отсутствующего синего канала стоил бы всей сцены.
     evi = ndwi = None
-    blue_href = _asset_href(item, S2_ASSETS["blue"])
-    green_href = _asset_href(item, S2_ASSETS["green"])
+    blue_href = _asset_href(item, S2_ASSETS["blue"], src)
+    green_href = _asset_href(item, S2_ASSETS["green"], src)
     try:
         if blue_href:
             blue = _scale_s2(_read_to_grid(blue_href, grid, "bilinear"), offset)
@@ -721,10 +1071,10 @@ def _scale_s2(read_result: tuple[np.ndarray, Any], offset: float) -> np.ndarray:
     return (out + offset) / 10000.0
 
 
-def _process_landsat(item: Any, shape_wgs84, obs_date: date):
-    red_href = _asset_href(item, LANDSAT_ASSETS["red"])
-    nir_href = _asset_href(item, LANDSAT_ASSETS["nir"])
-    qa_href = _asset_href(item, LANDSAT_ASSETS["qa"])
+def _process_landsat(item: Any, shape_wgs84, obs_date: date, src: _Source):
+    red_href = _asset_href(item, LANDSAT_ASSETS["red"], src)
+    nir_href = _asset_href(item, LANDSAT_ASSETS["nir"], src)
+    qa_href = _asset_href(item, LANDSAT_ASSETS["qa"], src)
     if not (red_href and nir_href):
         return None
 
@@ -764,8 +1114,8 @@ def _process_landsat(item: Any, shape_wgs84, obs_date: date):
 
     evi = ndwi = None
     try:
-        blue_href = _asset_href(item, LANDSAT_ASSETS["blue"])
-        green_href = _asset_href(item, LANDSAT_ASSETS["green"])
+        blue_href = _asset_href(item, LANDSAT_ASSETS["blue"], src)
+        green_href = _asset_href(item, LANDSAT_ASSETS["green"], src)
         if blue_href:
             blue = _scale_landsat(_read_to_grid(blue_href, grid, "bilinear"), scale, offset)
             evi = _median_index(_evi(nir, red, blue), valid & np.isfinite(blue))
@@ -788,14 +1138,14 @@ def _scale_landsat(read_result: tuple[np.ndarray, Any], scale: float, offset: fl
     return out * scale + offset
 
 
-def _process_modis(item: Any, shape_wgs84, obs_date: date):
+def _process_modis(item: Any, shape_wgs84, obs_date: date, src: _Source):
     """MOD13Q1: NDVI и EVI уже посчитаны производителем, каналов отражения нет.
 
     Поэтому NDWI здесь принципиально недоступен — оставляем None, это законный
     случай по контракту. Пикселей внутри поля мало (250 м), поэтому медиана
     считается по 2-4 значениям; ядро учитывает это весом сенсора 0,5.
     """
-    ndvi_href = _asset_href(item, MODIS_ASSETS["ndvi"])
+    ndvi_href = _asset_href(item, MODIS_ASSETS["ndvi"], src)
     if not ndvi_href:
         return None
 
@@ -808,7 +1158,7 @@ def _process_modis(item: Any, shape_wgs84, obs_date: date):
         return None
 
     valid = inside.copy()
-    qa_href = _asset_href(item, MODIS_ASSETS["qa"])
+    qa_href = _asset_href(item, MODIS_ASSETS["qa"], src)
     if qa_href:
         rel, _ = _read_to_grid(qa_href, grid, "nearest")
         valid &= np.isin(rel.astype(np.int16), MODIS_RELIABILITY_OK)
@@ -832,7 +1182,7 @@ def _process_modis(item: Any, shape_wgs84, obs_date: date):
 
     evi = None
     try:
-        evi_href = _asset_href(item, MODIS_ASSETS["evi"])
+        evi_href = _asset_href(item, MODIS_ASSETS["evi"], src)
         if evi_href:
             raw_evi, evi_nodata = _read_to_grid(evi_href, grid, "nearest")
             a = raw_evi.astype(np.float32)

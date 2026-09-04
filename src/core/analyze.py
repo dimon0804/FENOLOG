@@ -40,6 +40,15 @@ try:  # pragma: no cover - зависит от наличия соседнего
 except ImportError:  # pragma: no cover
     CropClimatology = None  # type: ignore
 
+# Журнал агротехнических работ. Заказчик кейса просил поле, куда пользователь
+# вписывает, что и когда вносил на поле. Для ядра это второй, независимый от
+# погоды источник объяснений: гербицид за неделю до просадки объясняет её лучше
+# любой метеосводки, а уборка внутри периода вообще снимает тревогу.
+try:  # pragma: no cover
+    from src.core.agrolog import explain_with_agro  # type: ignore
+except ImportError:  # pragma: no cover
+    explain_with_agro = None  # type: ignore
+
 # Готовая норма по культуре, если её кто-то загрузил и положил сюда.
 # Слой API вызывает set_crop_climatology() один раз при старте.
 _CROP_CLIM = None
@@ -107,8 +116,63 @@ def _crop_norm(crop_type: str | None, doys: np.ndarray):
     return mean, std
 
 
-def analyze(inp: SeriesInput, output_step: int = OUTPUT_STEP_DAYS) -> AnalysisResult:
-    """Собирает ряд, восстанавливает пропуски, считает норму и находит аномалии."""
+
+def _apply_agro_journal(anomalies, agro_events, crop_type) -> None:
+    """Дополняет найденные периоды сведениями из журнала работ.
+
+    Меняет три вещи и только их: дописывает объяснение, поправляет уверенность и
+    складывает свидетельства. Границы периода и класс серьёзности journal не
+    трогает — они получены из данных, а журнал вводит человек, и ошибка в нём не
+    должна переписывать измерение.
+
+    Отдельный случай — подсказка `agro_suggest_cause`. Модуль журнала не меняет
+    версию причины сам, но если в период попала запись об уборке, он говорит об
+    этом прямо, и здесь версия переписывается: плановая работа объясняет просадку
+    лучше, чем «резкое одномоментное событие».
+    """
+    if not agro_events or explain_with_agro is None:
+        return
+    for a in anomalies:
+        try:
+            extra, delta, evidence = explain_with_agro(
+                a.cause, a.cause_confidence, a.start, a.end, agro_events, crop_type
+            )
+        except Exception:  # noqa: BLE001 — журнал не имеет права ронять анализ
+            continue
+        if not extra and not delta:
+            continue
+        # Журнал может не просто дополнить объяснение, а переписать саму версию:
+        # уборка внутри периода объясняет просадку лучше, чем «резкое событие».
+        # В этом случае поправку надо брать для НОВОЙ версии, а не для старой —
+        # иначе получается бессмыслица: журнал подтвердил уборку, а уверенность
+        # в ней упала, потому что применилась поправка «минус к погодной версии».
+        suggested = (evidence or {}).get("agro_suggest_cause")
+        if suggested and suggested != a.cause:
+            try:
+                extra2, delta2, evidence2 = explain_with_agro(
+                    suggested, a.cause_confidence, a.start, a.end, agro_events, crop_type
+                )
+                if extra2:
+                    extra, delta, evidence = extra2, delta2, (evidence2 or evidence)
+            except Exception:  # noqa: BLE001
+                pass
+            a.cause = suggested
+
+        if extra:
+            a.explanation = (a.explanation.rstrip() + " " + extra).strip()
+        a.cause_confidence = float(min(0.95, max(0.05, a.cause_confidence + delta)))
+        if evidence:
+            a.evidence.update(evidence)
+
+
+def analyze(inp: SeriesInput, output_step: int = OUTPUT_STEP_DAYS,
+            agro_events: list | None = None) -> AnalysisResult:
+    """Собирает ряд, восстанавливает пропуски, считает норму и находит аномалии.
+
+    agro_events — журнал работ по полю (список AgroEvent из src/core/agrolog.py).
+    Необязательный: контракт SeriesInput заморожен, поэтому журнал приходит
+    отдельным аргументом, и старый вызов analyze(inp) работает как раньше.
+    """
     obs = [o for o in inp.observations if o.ndvi is not None and np.isfinite(o.ndvi)]
     if not obs:
         return AnalysisResult(
@@ -213,6 +277,8 @@ def analyze(inp: SeriesInput, output_step: int = OUTPUT_STEP_DAYS) -> AnalysisRe
         norm_is_crop=(clim_kind == "crop"),
         observed=observed_flags,
     )
+
+    _apply_agro_journal(anomalies, agro_events, inp.crop_type)
 
     return AnalysisResult(
         polygon_id=inp.polygon_id,
