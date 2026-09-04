@@ -267,7 +267,8 @@ class SiblingIterL3000(_SiblingIterative):
 # ---------------------------------------------------------------------------
 
 def _corrections_from_table(table: pd.DataFrame, corr_power: float = 0.0,
-                            clip_lo: float = -0.25, clip_hi: float = 0.25):
+                            clip_lo: float = -0.25, clip_hi: float = 0.25,
+                            corr_floor: float = 0.1):
     """Суточная поправка для каждого поля по таблице остатков.
 
     corr_power — степень, в которую возводится корреляция остатков соседа с
@@ -298,7 +299,10 @@ def _corrections_from_table(table: pd.DataFrame, corr_power: float = 0.0,
         # в собственной поправке и не вычитает свой же шум.
         C = table.corr(min_periods=30).to_numpy()
         C = np.nan_to_num(C, nan=0.0)
-        W = np.clip(C, 0.0, None) ** corr_power
+        # Нижний порог вместо обнуления: поле, у которого все соседи слабо
+        # коррелированы, иначе осталось бы вообще без поправки, а так получает
+        # обычное среднее как запасной путь. Находка E07, +0,0005 на трёх зёрнах.
+        W = np.clip(C, corr_floor, None) ** corr_power
         np.fill_diagonal(W, 0.0)
     else:
         W = np.ones((n, n))

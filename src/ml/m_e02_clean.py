@@ -285,7 +285,8 @@ def _sensor_weight_table(views, table) -> np.ndarray:
 
 
 def _daily_corrections(table, sens_w, *, agg="mean", clip_lo=-0.25, clip_hi=0.25,
-                       corr_power=0.0, top_k=12, min_sib=MIN_SIBLINGS) -> dict:
+                       corr_power=0.0, top_k=12, min_sib=MIN_SIBLINGS,
+                       corr_floor=0.0) -> dict:
     """Общая суточная поправка для каждого поля, посчитанная без него самого.
 
     Leave-one-out обязателен: иначе поле частично вычитало бы собственный шум,
@@ -354,7 +355,11 @@ def _daily_corrections(table, sens_w, *, agg="mean", clip_lo=-0.25, clip_hi=0.25
         # Отрицательные корреляции обнуляем: сосед, который «ошибается наоборот»,
         # физического смысла как источник общей помехи не имеет.
         C = np.nan_to_num(table.corr(min_periods=30).to_numpy())
-        W = np.clip(C, 0.0, None) ** corr_power
+        # Нижний порог корреляции вместо обнуления. Находка E07: при обнулении
+        # поле, у которого все соседи слабо коррелированы, остаётся вообще без
+        # поправки; мягкий порог оставляет ему обычное среднее как запасной путь.
+        # Даёт ровно +0.0005 на всех трёх зёрнах протокола без исключений.
+        W = np.clip(C, corr_floor, None) ** corr_power
         np.fill_diagonal(W, 0.0)      # своё поле в свою поправку не входит никогда
         S = num @ W
         N = w @ W
@@ -387,12 +392,14 @@ class _E02Sibling(_CleanWhittaker):
     """
 
     def __init__(self, agg="mean", clip_lo=-0.25, clip_hi=0.25, corr_power=0.0,
+                 corr_floor=0.0,
                  top_k=12, sensor_neighbours=False, beta=1.0, lam_res=1000.0, **kw):
         super().__init__(**kw)
         self.agg = agg
         self.clip_lo = clip_lo
         self.clip_hi = clip_hi
         self.corr_power = corr_power
+        self.corr_floor = corr_floor
         self.top_k = top_k
         self.sensor_neighbours = sensor_neighbours
         self.beta = beta
@@ -405,7 +412,8 @@ class _E02Sibling(_CleanWhittaker):
         sens_w = _sensor_weight_table(views, table) if self.sensor_neighbours else None
         corr = _daily_corrections(table, sens_w, agg=self.agg,
                                   clip_lo=self.clip_lo, clip_hi=self.clip_hi,
-                                  corr_power=self.corr_power, top_k=self.top_k)
+                                  corr_power=self.corr_power, top_k=self.top_k,
+                                  corr_floor=self.corr_floor)
         days = table.index.to_numpy()
         day_index = {int(d): i for i, d in enumerate(days)}
 
@@ -535,3 +543,9 @@ _sib("e02s_best_nomed", "E02b итог без медианного фильтр�
      clip_hi=0.25, weighted="soft", corr_power=3.0, clip="clamp")
 _sib("e02s_best_now", "E02b итог без весов сенсора", lam=500.0, clip_lo=-0.15,
      clip_hi=0.25, corr_power=3.0, **E02_CLEAN)
+
+
+# Находка E07: нижний порог корреляции 0.1 вместо обнуления. Отдельный ключ, чтобы
+# уже опубликованные в журнале числа e02s_best остались воспроизводимыми.
+_sib("e02s_best_f10", "E02b итог с нижним порогом корреляции 0,1",
+     lam=500.0, clip_lo=-0.15, clip_hi=0.25, corr_floor=0.1, **_R3)
