@@ -27,9 +27,22 @@ import pandas as pd
 DOY_WINDOW = 8
 # Минимум сезонов, при котором норме по полигону можно доверять
 MIN_YEARS = 3
-# Нижняя граница разброса: при std около нуля z-оценка улетает в сотни
-# и любая мелкая рябь превращается в «критическую аномалию».
-MIN_STD = 0.02
+# Нижняя граница разброса. Величина не произвольная: собственный шум одного
+# наблюдения NDVI измерен и равен 0,066 (std разности значений соседних дней
+# 0,0931, делённая на корень из двух). Норма построена из тех же наблюдений,
+# поэтому её разброс физически не может быть заметно меньше этого шума —
+# заявить норму втрое точнее измерения, которым она получена, нельзя.
+#
+# Прежнее значение 0,02 давало на полях с короткой историей z-оценки под минус
+# двадцать пять: на пашне идёт севооборот, норма по двум прошлым сезонам
+# описывает другую культуру, отклонение выходит до 0,5 NDVI и делится почти на
+# ноль. Продукт при этом уверенно сообщал «критическая аномалия» там, где просто
+# не хватало истории.
+MIN_STD = 0.05
+
+# Сколько опорных лет должно остаться под нормой ПОСЛЕ исключения текущего года,
+# чтобы ей можно было верить. Два года — это не норма, а вторая точка.
+MIN_REFERENCE_YEARS = 3
 
 
 def _circular_doy_mask(doy_grid: np.ndarray, target: int, window: int) -> np.ndarray:
@@ -154,7 +167,24 @@ def lookup_norm(
         return mean, std
 
     got = clim.reindex(np.asarray(doys))
-    return got["mean"].to_numpy(), got["std"].to_numpy()
+    mean = got["mean"].to_numpy(dtype=float, copy=True)
+    std = got["std"].to_numpy(dtype=float, copy=True)
+    return _drop_thin(mean, std, got["n_years"].to_numpy(dtype=float))
+
+
+def _drop_thin(mean: np.ndarray, std: np.ndarray, n_years: np.ndarray):
+    """Стирает норму там, где под ней меньше MIN_REFERENCE_YEARS опорных лет.
+
+    Лучше честно не иметь z-оценки, чем выдать её по двум годам и объявить
+    севооборот критической аномалией. Ядро на пустую норму реагирует штатно:
+    периоды на таких участках просто не ищутся.
+    """
+    thin = ~np.isfinite(n_years) | (n_years < MIN_REFERENCE_YEARS)
+    mean = mean.copy()
+    std = std.copy()
+    mean[thin] = np.nan
+    std[thin] = np.nan
+    return mean, std
 
 
 def zscore(values: np.ndarray, clim_mean: np.ndarray, clim_std: np.ndarray) -> np.ndarray:

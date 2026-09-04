@@ -17,3 +17,12 @@ pystac-client>=0.8
 odc-stac>=0.3
 rioxarray>=0.17
 requests>=2.32
+
+# Слой автосбора данных (снимки, погода, контуры полей)
+rasterio>=1.4
+pystac-client>=0.8
+planetary-computer>=1.0
+pyproj>=3.6
+
+# Графики отчёта (для работы сервиса не требуется)
+matplotlib>=3.9
