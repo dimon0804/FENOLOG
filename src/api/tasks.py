@@ -167,7 +167,13 @@ class TaskManager:
             result.meta.update(report.as_meta())
 
             task.warnings = list(report.failures)
-            task.result = _jsonable(result)
+            payload = _jsonable(result)
+            # Погода едет наружу вместе с рядом. В AnalysisResult её нет — ядру
+            # она нужна только чтобы назвать причину, — но панель температуры и
+            # осадков под графиком обязательна: без неё фраза «дефицит осадков»
+            # выглядит голословной, и проверить её пользователю нечем.
+            payload["weather"] = _jsonable(series_input.weather)
+            task.result = payload
             task.status = "done"
             self._set(task, STAGE_DONE, 100)
 

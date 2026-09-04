@@ -1,0 +1,268 @@
+/* Оформление намеренно спокойное: оценивают понятность сценария и наглядность
+   карты с графиками, а не оригинальность. Палитра земляная, акцент один —
+   зелёный; красный и оранжевый оставлены классам аномалий, чтобы на графике они
+   ни с чем не спорили. */
+
+:root {
+  --bg: #f4f2ee;
+  --panel: #ffffff;
+  --line: #e2ded6;
+  --ink: #23241f;
+  --ink-soft: #6d6c64;
+  --accent: #3f7d4e;
+  --accent-soft: #e8f0e8;
+  --critical: #c0392b;
+  --suppression: #d98324;
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(35, 36, 31, 0.06), 0 4px 16px rgba(35, 36, 31, 0.05);
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.5 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 7px 13px;
+  transition: background 0.12s, border-color 0.12s;
+}
+button:hover:not(:disabled) { background: #faf9f7; border-color: #cfcabf; }
+button:disabled { opacity: 0.45; cursor: default; }
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 500;
+}
+button.primary:hover:not(:disabled) { background: #35694160; background: #356941; border-color: #356941; }
+
+button.danger { color: var(--critical); }
+button.ghost { border-color: transparent; background: transparent; padding: 4px 8px; }
+button.ghost:hover:not(:disabled) { background: #ece9e3; }
+
+input[type='text'], input[type='search'] {
+  font: inherit;
+  width: 100%;
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+}
+input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+
+/* ------------------------------------------------------------------ каркас */
+
+.app {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100%;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 18px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.topbar h1 {
+  font-size: 16px;
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.topbar .subtitle { color: var(--ink-soft); font-size: 13px; }
+.topbar .spacer { flex: 1; }
+
+.workspace {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  min-height: 0;
+}
+
+.sidebar {
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.stage {
+  display: grid;
+  grid-template-rows: minmax(300px, 46%) 1fr;
+  min-height: 0;
+}
+
+.analysis {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  min-height: 0;
+  border-top: 1px solid var(--line);
+}
+
+.charts { overflow-y: auto; padding: 14px 16px; min-width: 0; }
+.feed { border-left: 1px solid var(--line); overflow-y: auto; background: var(--panel); }
+
+/* ------------------------------------------------------------------- блоки */
+
+.block h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.card h3 { margin: 0 0 10px; font-size: 14px; font-weight: 600; }
+
+.muted { color: var(--ink-soft); }
+.small { font-size: 12.5px; }
+.row { display: flex; gap: 8px; align-items: center; }
+.stack { display: flex; flex-direction: column; gap: 8px; }
+
+/* ------------------------------------------------------------------- карта */
+
+.map-wrap { position: relative; min-height: 0; }
+.map { position: absolute; inset: 0; }
+
+.map-tools {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 5;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  max-width: calc(100% - 24px);
+}
+.map-tools button { box-shadow: var(--shadow); }
+
+.map-hint {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 5;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  box-shadow: var(--shadow);
+  font-size: 13px;
+}
+.map-hint.warn { border-color: #e3c07a; background: #fdf6e6; }
+
+/* ------------------------------------------------------------------ список */
+
+.polygon-item {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  background: var(--panel);
+}
+.polygon-item:hover { border-color: #cfcabf; background: #faf9f7; }
+.polygon-item.active { border-color: var(--accent); background: var(--accent-soft); }
+.polygon-item .name { font-weight: 500; }
+.polygon-item .meta { font-size: 12px; color: var(--ink-soft); }
+.polygon-item .actions { display: flex; gap: 2px; margin-top: 6px; }
+
+/* -------------------------------------------------------------- индикаторы */
+
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+.dot.ok { background: #4b8a5a; }
+.dot.warn { background: #d98324; }
+.dot.bad { background: #c0392b; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12.5px;
+  background: var(--panel);
+}
+.badge.warn { border-color: #e3c07a; background: #fdf6e6; }
+.badge.bad { border-color: #e0a49c; background: #fbeeec; }
+
+.progress {
+  height: 6px;
+  border-radius: 999px;
+  background: #e6e3dc;
+  overflow: hidden;
+}
+.progress > div {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.35s ease;
+}
+
+/* ------------------------------------------------------------ лента событий */
+
+.anomaly {
+  border-bottom: 1px solid var(--line);
+  padding: 12px 16px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+}
+.anomaly:hover { background: #faf9f7; }
+.anomaly.active { background: var(--accent-soft); border-left-color: var(--accent); }
+.anomaly .head { display: flex; align-items: baseline; gap: 8px; justify-content: space-between; }
+.anomaly .dates { font-weight: 600; }
+.anomaly .cause { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
+.anomaly .explanation { margin-top: 6px; font-size: 13px; }
+.anomaly .numbers { margin-top: 6px; display: flex; gap: 14px; font-size: 12px; color: var(--ink-soft); }
+
+.severity-tag {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.empty { padding: 28px 18px; text-align: center; color: var(--ink-soft); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: var(--ink-soft); margin-bottom: 6px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 18px; height: 0; border-top-width: 2px; border-top-style: solid; display: inline-block; }
+.legend i.dotmark { height: 8px; width: 8px; border-radius: 50%; border: 0; }
+.legend i.band { height: 10px; width: 18px; border: 0; border-radius: 2px; }
+
+.error-banner {
+  border: 1px solid #e0a49c;
+  background: #fbeeec;
+  color: #7d2b21;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 13px;
+}
