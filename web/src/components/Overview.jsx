@@ -213,7 +213,10 @@ function Activity({ summary, onOpenField, onGoMap }) {
         </div>
       ) : (
         <div className="activity-list">
-          {fields.slice(0, 6).map((field) => (
+          {/* Пять строк, не больше: блок стоит в одном ряду с быстрым стартом,
+              и длинный список растягивает ряд, оставляя рядом полкарточки
+              пустого зелёного. Всё остальное — в разделе «Участки». */}
+          {fields.slice(0, 5).map((field) => (
             <ActivityRow key={field.id} field={field} onOpen={onOpenField} />
           ))}
         </div>
