@@ -1,4 +1,4 @@
-import { CLIMATOLOGY, SENSOR, formatDate } from '../dict.js'
+import { CLIMATOLOGY, SENSOR, formatDate, plural } from '../dict.js'
 
 /**
  * Карточка выбранного поля: что выбрано, чем это считалось, кнопка запуска и
@@ -102,7 +102,7 @@ export default function FieldPanel({
             </span>
           )}
           <span className="chip">
-            {meta.collected_observations} наблюдений
+            {plural(meta.collected_observations, 'наблюдение', 'наблюдения', 'наблюдений')}
             {meta.sources && Object.keys(meta.sources).length > 0 && (
               <>
                 {' · '}
@@ -112,11 +112,13 @@ export default function FieldPanel({
               </>
             )}
           </span>
-          <span className="chip">погода: {meta.collected_weather_days} дней</span>
+          <span className="chip">
+            погода: {plural(meta.collected_weather_days, 'день', 'дня', 'дней')}
+          </span>
           <span className="chip">
             {formatDate(meta.date_from)} — {formatDate(meta.date_to)}
           </span>
-          <span className="chip">сбор {meta.collect_seconds} с</span>
+          <span className="chip">сбор {duration(meta.collect_seconds)}</span>
           <Siblings info={meta.siblings} />
         </div>
       )}
@@ -126,6 +128,16 @@ export default function FieldPanel({
       )}
     </div>
   )
+}
+
+/** Время сбора словами: «47 с» и «14 мин 22 с» вместо «861.6 с». */
+function duration(seconds) {
+  if (seconds == null) return '—'
+  const total = Math.round(seconds)
+  if (total < 90) return `${total} с`
+  const minutes = Math.floor(total / 60)
+  const rest = total % 60
+  return rest ? `${minutes} мин ${rest} с` : `${minutes} мин`
 }
 
 /**
