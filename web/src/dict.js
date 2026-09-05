@@ -7,9 +7,9 @@
 // Классы состояния по z-оценке. Пороги заданы ядром: z < -2 — критическая
 // аномалия, -2 <= z < -1 — угнетение биомассы.
 export const SEVERITY = {
-  critical: { label: 'Критическая аномалия', color: '#c0392b', soft: 'rgba(192, 57, 43, 0.16)' },
-  suppression: { label: 'Угнетение биомассы', color: '#d98324', soft: 'rgba(217, 131, 36, 0.16)' },
-  normal: { label: 'Норма', color: '#4b8a5a', soft: 'rgba(75, 138, 90, 0.16)' },
+  critical: { label: 'Критическая аномалия', color: '#d4342a', soft: 'rgba(212, 52, 42, 0.14)' },
+  suppression: { label: 'Угнетение биомассы', color: '#e08a20', soft: 'rgba(224, 138, 32, 0.16)' },
+  normal: { label: 'Норма', color: '#4e9b36', soft: 'rgba(78, 155, 54, 0.14)' },
 }
 
 // Все версии причины, которые умеет называть ядро. non_weather — это

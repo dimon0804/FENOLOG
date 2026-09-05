@@ -38,23 +38,23 @@ export default function WeatherPanel({ weather, anomalies, activeAnomaly }) {
       </div>
       <ResponsiveContainer width="100%" height={170}>
         <ComposedChart data={data} margin={{ top: 6, right: 12, bottom: 4, left: -18 }}>
-          <CartesianGrid stroke="#e8e5df" vertical={false} />
+          <CartesianGrid stroke="#eeeeee" vertical={false} />
           <XAxis
             dataKey="t"
             type="number"
             scale="time"
             domain={['dataMin', 'dataMax']}
             tickFormatter={(t) => new Date(t).toLocaleDateString('ru-RU', { month: 'short', year: '2-digit' })}
-            tick={{ fontSize: 11, fill: '#6d6c64' }}
-            stroke="#cfcabf"
+            tick={{ fontSize: 11, fill: '#6f6f6f' }}
+            stroke="#dddddd"
             minTickGap={40}
           />
-          <YAxis yAxisId="precip" tick={{ fontSize: 11, fill: '#6d6c64' }} stroke="#cfcabf" width={38} />
+          <YAxis yAxisId="precip" tick={{ fontSize: 11, fill: '#6f6f6f' }} stroke="#dddddd" width={38} />
           <YAxis
             yAxisId="temp"
             orientation="right"
-            tick={{ fontSize: 11, fill: '#6d6c64' }}
-            stroke="#cfcabf"
+            tick={{ fontSize: 11, fill: '#6f6f6f' }}
+            stroke="#dddddd"
             width={34}
           />
 
