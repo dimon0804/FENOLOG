@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="noindex">
+<!-- Значок вкладки вшит прямо в разметку: обычный /favicon.svg — это ещё
+     один запрос к серверу, которого на странице ошибки может не быть. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%3E%20%3Crect%20width%3D%2232%22%20height%3D%2232%22%20rx%3D%227%22%20fill%3D%22%230d120d%22%2F%3E%20%3Cpath%20d%3D%22M5.98%2024.35A15.09%2015.09%200%200%201%2018.82%2029.03A256.91%20256.91%200%200%200%205.98%2024.35Z%22%20fill%3D%22%234e9b36%22%2F%3E%20%3Cpath%20d%3D%22M4.45%2021.7A14.62%2014.62%200%200%201%2020.9%2028.35A25.54%2025.54%200%200%200%204.45%2021.7Z%22%20fill%3D%22%2377c043%22%2F%3E%20%3Cpath%20d%3D%22M15.16%2013.8L15.16%2023.33%22%20stroke%3D%22%234e9b36%22%20stroke-width%3D%221.5%22%2F%3E%20%3Cpath%20d%3D%22M9.18%2012.73A5.76%205.76%200%200%201%2015.37%2019.4A5.69%205.69%200%200%201%209.18%2012.73Z%22%20fill%3D%22%234e9b36%22%2F%3E%20%3Cpath%20d%3D%22M16.21%2020.52A3.17%203.17%200%200%201%2019.93%2016.17A3.24%203.24%200%200%201%2016.21%2020.52Z%22%20fill%3D%22%234e9b36%22%2F%3E%20%3Cpath%20d%3D%22M28.48%2015.49A12.55%2012.55%200%200%201%2020.9%2028.35%22%20stroke%3D%22%2377c043%22%20stroke-width%3D%222.2%22%20stroke-linecap%3D%22round%22%20fill%3D%22none%22%2F%3E%20%3Cpath%20d%3D%22M17.96%204.4A12.55%2012.55%200%200%200%203.88%2020.05%22%20stroke%3D%22%23f4f7f3%22%20stroke-width%3D%222.2%22%20stroke-linecap%3D%22round%22%20fill%3D%22none%22%2F%3E%20%3C%2Fsvg%3E">
+<title>Внутренняя ошибка сервиса — Фенолог</title>
+
+<!-- Страница ошибки намеренно самодостаточна: стили внутри, знак сервиса
+     нарисован здесь же вектором, ни одного внешнего запроса — ни шрифта, ни
+     картинки, ни скрипта. Она показывается ровно тогда, когда что-то из
+     обычной цепочки не работает, и не имеет права зависеть от сборки
+     интерфейса, от сети или от включённого JavaScript.
+
+     Из-за этого CSS и знак повторяются в трёх файлах ошибок. Это осознанное
+     дублирование: любая попытка вынести общее в отдельный файл вернула бы
+     страницу к зависимости от того, что как раз могло отвалиться.
+
+     Переключателя тем здесь нет — он живёт в приложении и хранит выбор в
+     localStorage, читать который без JS нечем. Поэтому обе темы держатся
+     на системной настройке, prefers-color-scheme. Цвета — те же переменные,
+     что в web/src/styles.css. -->
+
+<style>
+  :root {
+    --page: #f1f1f1;
+    --card: #ffffff;
+    --line: #e6e6e6;
+    --ink: #101010;
+    --ink-soft: #6a6a6a;
+    --green: #4e9b36;
+    --green-text: #3d8129;
+    --green-soft: #eaf3e6;
+    --green-hover: #43862f;
+    --on-green: #ffffff;
+    --shadow: 0 1px 2px rgba(16, 16, 16, 0.04), 0 6px 22px rgba(16, 16, 16, 0.06);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      /* Фон не чёрный, а очень тёмный с уходом в зелёный — как в интерфейсе:
+         фирменный цвет сервиса зелёный, нейтрально-серая тьма выглядела бы
+         чужой. Акценты подняты по светлоте: #4e9b36 на тёмном даёт контраст
+         3,3 и для надписей не годится. */
+      --page: #0b0f0a;
+      --card: #161e15;
+      --line: #2b352a;
+      --ink: #e9f0e6;
+      --ink-soft: #a3b3a0;
+      --green: #6bbf4f;
+      --green-text: #6bbf4f;
+      --green-soft: rgba(107, 191, 79, 0.18);
+      --green-hover: #7ccc5f;
+      --on-green: #08150a;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 22px rgba(0, 0, 0, 0.45);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 16px;
+    background: var(--page);
+    color: var(--ink);
+    /* Manrope стоит первым не ради загрузки, а на случай, если он уже есть в
+       системе: подключать файл шрифта на странице ошибки нельзя. Дальше идёт
+       обычная системная лесенка. */
+    font-family: 'Manrope Variable', 'Manrope', 'Segoe UI', system-ui, -apple-system, Roboto, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .card {
+    width: 100%;
+    max-width: 560px;
+    padding: 40px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+  }
+
+  .brand { display: flex; align-items: center; gap: 14px; margin-bottom: 28px; }
+  .brand svg { flex: none; }
+  .brand b { display: block; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
+  .brand span { display: block; font-size: 12.5px; color: var(--ink-soft); }
+
+  .code {
+    display: inline-block;
+    margin: 0 0 14px;
+    padding: 5px 11px;
+    border-radius: 999px;
+    background: var(--green-soft);
+    color: var(--green-text);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  h1 { margin: 0 0 12px; font-size: 26px; line-height: 1.25; font-weight: 700; letter-spacing: -0.02em; }
+  p { margin: 0 0 14px; }
+  .soft { color: var(--ink-soft); }
+
+  /* Список «что делать» — маркер зелёной чёрточкой, а не точкой: точка на
+     этом месте читается как пункт меню. */
+  ul { margin: 0 0 24px; padding: 0; list-style: none; }
+  li { position: relative; padding-left: 20px; margin-bottom: 8px; }
+  li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 11px;
+    width: 10px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--green);
+  }
+
+  .btn {
+    display: inline-block;
+    padding: 12px 22px;
+    border-radius: 10px;
+    background: var(--green);
+    color: var(--on-green);
+    font-size: 14.5px;
+    font-weight: 700;
+    text-decoration: none;
+  }
+  .btn:hover { background: var(--green-hover); }
+  .btn:focus-visible { outline: 2px solid var(--green-text); outline-offset: 3px; }
+
+  .foot {
+    margin: 26px 0 0;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+
+  /* Телефон: карточка занимает ширину экрана, поля и заголовок ужимаются.
+     Проверено на 360 пикселях — самой узкой ходовой ширине. */
+  @media (max-width: 480px) {
+    body { padding: 16px 12px; }
+    .card { padding: 26px 20px; border-radius: 14px; }
+    h1 { font-size: 21px; }
+    body { font-size: 14.5px; }
+    .btn { display: block; text-align: center; }
+  }
+</style>
+</head>
+<body>
+
+<main class="card">
+  <div class="brand">
+    <!-- Знак сервиса: тот же вектор, что в интерфейсе (web/src/components/icons.jsx).
+         Белые элементы макета нарисованы currentColor, поэтому знак сам
+         подстраивается под тему; зелёный фирменный задан явно. -->
+    <svg width="48" height="48" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      <path d="M14.57 55.88A41.69 41.69 0 0 1 29.04 60.58A20.04 20.04 0 0 1 14.57 55.88Z" fill="#2f6b2a"/>
+      <path d="M10.15 52.17A33.73 33.73 0 0 1 34.32 60.26A270.84 270.84 0 0 1 10.15 52.17Z" fill="#2f6b2a"/>
+      <path d="M6.85 48.03A33.62 33.62 0 0 1 38.53 59.25A94.85 94.85 0 0 0 6.85 48.03Z" fill="#4e9b36"/>
+      <path d="M31.39 48.3A19.71 19.71 0 0 1 53.33 45.36A47.76 47.76 0 0 0 31.39 48.3Z" fill="#4e9b36"/>
+      <path d="M34.79 52.62A14.1 14.1 0 0 1 51.78 50.46A37.19 37.19 0 0 0 34.79 52.62Z" fill="#2f6b2a"/>
+      <path d="M28.15 26.97L28.15 47.37" stroke="#4e9b36" stroke-width="1.6"/>
+      <path d="M15.01 24.04A12.66 12.66 0 0 1 28.61 38.72A12.51 12.51 0 0 1 15.01 24.04Z" fill="#4e9b36"/>
+      <path d="M30.46 41.19A6.96 6.96 0 0 1 38.65 31.61A7.12 7.12 0 0 1 30.46 41.19Z" fill="#4e9b36"/>
+      <path d="M57.45 30.12A27.6 27.6 0 0 1 40.78 58.41A51.26 51.26 0 0 0 57.45 30.12Z" fill="#77c043"/>
+      <path d="M4.59 43.78A32.15 32.15 0 0 1 40.78 58.41A56.16 56.16 0 0 0 4.59 43.78Z" fill="#77c043"/>
+      <path d="M34.32 5.74A27.6 27.6 0 0 0 3.34 40.14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+      <g stroke="currentColor" fill="none">
+        <rect x="40.8" y="4.38" width="7.14" height="4.4" rx="0.5" stroke-width="1.3" transform="rotate(46 44.37 6.58)"/>
+        <rect x="53.62" y="18.05" width="7.14" height="4.4" rx="0.5" stroke-width="1.3" transform="rotate(46 57.19 20.25)"/>
+        <rect x="48.63" y="8.88" width="5.69" height="7.76" rx="1" fill="currentColor" stroke="none" transform="rotate(46 51.48 12.76)"/>
+        <path d="M43.13 14.61A6.09 6.09 0 0 1 49.31 21.88Z" fill="currentColor" stroke="none"/>
+        <g stroke-width="1.15" stroke-linecap="round">
+          <path d="M40.87 18.28A5.25 5.25 0 0 0 45.7 22.79"/>
+          <path d="M37.65 18.73A8.5 8.5 0 0 0 45.48 26.03"/>
+          <path d="M34.29 19.21A11.9 11.9 0 0 0 45.24 29.42"/>
+        </g>
+      </g>
+    </svg>
+    <div>
+      <b>Фенолог</b>
+      <span>мониторинг вегетационной динамики</span>
+    </div>
+  </div>
+
+  <p class="code">Ошибка 500</p>
+  <h1>Сервис не смог обработать запрос</h1>
+
+  <p>Внутренний сбой при выполнении запроса. Данные не потеряны: сохранённые
+     участки, журналы полевых работ и уже посчитанные разборы остались на месте,
+     восстанавливать вручную ничего не нужно.</p>
+
+  <ul>
+    <li>Обновите страницу — чаще всего сбой разовый и одной попытки хватает.</li>
+    <li>Если не завершился разбор поля, запустите его заново: повторный запуск
+        безопасен и не создаёт лишних записей.</li>
+    <li>Если ошибка повторяется, вернитесь через несколько минут.</li>
+  </ul>
+
+  <a class="btn" href="/">Вернуться на главную</a>
+
+  <p class="foot">Фенолог — мониторинг вегетационной динамики полей по спутниковым и метеоданным.</p>
+</main>
+
+</body>
+</html>

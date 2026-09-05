@@ -19,12 +19,14 @@ import logging
 import time
 from urllib.parse import quote
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.api import config, geocoding
+from src.api.errors import PAGES_DIR as ERROR_PAGES_DIR, error_response
 from src.api.geometry import GeometryError, bbox_of, normalize_geometry, parse_bbox, validate_for_analysis
 from src.api.health import providers_health
 from src.api.schemas import (
@@ -70,6 +72,46 @@ app.add_middleware(
 def _geometry_error(_request, exc: GeometryError) -> JSONResponse:
     """Негодная геометрия — ошибка пользователя, а не сбой сервиса."""
     return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+@app.exception_handler(StarletteHTTPException)
+def _http_error(request: Request, exc: StarletteHTTPException) -> Response:
+    """Единая точка для всех отказов с явным кодом.
+
+    Перекрывает обработчик FastAPI по умолчанию, который всегда отвечает JSON.
+    Теперь ответ выбирается по адресу: под `/api` остаётся прежний JSON с полем
+    `detail` (на него опирается весь интерфейс, менять контракт нельзя),
+    браузеру человека уходит оформленная страница.
+
+    Сюда же приходят 404 от статики: StaticFiles — не отдельное приложение со
+    своим обработчиком, он просто поднимает HTTPException, и она всплывает
+    наверх. Именно так неизвестный адрес вида /какая-нибудь-страница получает
+    нашу страницу 404, хотя сам маршрут объявлен монтированием.
+    """
+    return error_response(request, exc.status_code, exc.detail, getattr(exc, "headers", None))
+
+
+@app.exception_handler(Exception)
+def _unhandled_error(request: Request, exc: Exception) -> Response:
+    """Последний рубеж: всё, что не поймали по дороге.
+
+    Правило сервиса — наружу не должно уходить ни одной пятисотой из-за
+    внешнего источника, и обработчики его соблюдают. Но остаётся ошибка в самом
+    коде, и на публичном домене она не имеет права показать трассировку:
+    трассировка уходит в лог сервера (Starlette после этого обработчика
+    поднимает исключение заново — как раз ради лога), а пользователь видит
+    страницу с объяснением, что данные целы и разбор можно повторить.
+    """
+    # exc_info передаётся явно, а не через log.exception: синхронный обработчик
+    # ошибок Starlette запускает в пуле потоков, и в этом потоке контекста
+    # исключения уже нет — в лог ушла бы строка без трассировки.
+    log.error(
+        "необработанная ошибка на %s %s",
+        request.method,
+        request.url.path,
+        exc_info=exc,
+    )
+    return error_response(request, 500)
 
 
 @app.on_event("startup")
@@ -480,8 +522,31 @@ def polygons_report_pdf(polygon_id: str):
 # Интерфейс
 # --------------------------------------------------------------------------------------
 
+# Сами страницы ошибок по прямым адресам: /errors/404.html и соседние.
+#
+# Нужны не приложению, а обратному прокси на публичном домене: 502 и 504 он
+# выдаёт сам, до нашего процесса запрос в этот момент не доходит, и показать
+# человеку он может только файл. Заодно по этим адресам страницу видно глазами,
+# не устраивая аварию ради проверки.
+#
+# Объявлено до монтирования интерфейса: StaticFiles на «/» перехватывает всё,
+# что объявлено после него.
+app.mount("/errors", StaticFiles(directory=str(ERROR_PAGES_DIR)), name="errors")
+
 # Монтируется последним: StaticFiles перехватывает все пути, и объявленный после
 # него маршрут API уже не сработает.
+#
+# Про 404 и одностраничное приложение. Обычно SPA требует отдавать index.html на
+# любой неизвестный путь, иначе ломаются прямые ссылки на внутренние экраны.
+# Здесь этого делать не нужно, и это проверено по коду: экраны в web/src/App.jsx
+# переключаются состоянием React (`section`), History API не используется вовсе,
+# так что внутренних адресов у интерфейса нет — единственная его точка входа
+# «/». Значит неизвестный путь и правда никуда не ведёт, и честный ответ на
+# него — 404, а не главная страница с подменённым адресом.
+#
+# Если внутренние адреса когда-нибудь появятся (роутер, ссылки на конкретное
+# поле), запасной вариант добавляется ровно здесь: обработчик на 404, который
+# для путей вне «/api» отдаёт index.html с кодом 200.
 if config.WEB_DIST.exists():
     app.mount("/", StaticFiles(directory=str(config.WEB_DIST), html=True), name="web")
 else:
