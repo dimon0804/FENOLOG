@@ -83,7 +83,7 @@ def _stateless_predictions(points: list, views: dict, context: dict) -> pd.DataF
     return pd.DataFrame(preds)
 
 
-def _fit_on_local_holdout(method, seed: int = SEED):
+def _fit_on_local_holdout(method, seed: int = SEED, test_path: str | None = None):
     """Обучает метод на локальном контрольном наборе целиком.
 
     Фолды GroupKFold нужны для честной ОЦЕНКИ: там модель не должна видеть поле,
@@ -93,8 +93,13 @@ def _fit_on_local_holdout(method, seed: int = SEED):
     """
     from src.ml.validate import prepare
 
+    # test_path позволяет строить контрольный набор по тому же файлу, который
+    # предстоит предсказывать. Это важно, когда наборы отличаются плотностью
+    # наблюдений: в новом тесте четверть точек приходится на годы до 2017-го,
+    # когда Sentinel-2 не было вовсе, и обучение на старом файле готовит модель
+    # не к той задаче.
     df_v, masked, views_v, points_v, _templates, _hidden = prepare(
-        use_train=True, hide_frac=0.20, seed=seed)
+        use_train=True, hide_frac=0.20, seed=seed, test_path=test_path)
     context = {"df": masked, "raw": df_v, "points": points_v}
     context["base_preds"] = _stateless_predictions(points_v, views_v, context)
     context["train_mask"] = np.ones(len(points_v), dtype=bool)
@@ -133,8 +138,66 @@ def _load_saved(method):
         return None
 
 
+def extra_history(df: pd.DataFrame, path: str = "data/private_features.csv",
+                  answers: str = "data/private_test_ground_truth.csv") -> pd.DataFrame:
+    """Дополняет ряды полей наблюдениями из ранее выданного файла.
+
+    Зачем. Второй тест обрывается на октябре 2024 года, а первый файл содержит
+    те же двадцать полей ещё и за 2025-й: 1 281 наблюдение, которых в новом
+    наборе нет. Лишний сезон истории напрямую улучшает климатическую норму
+    (в окне по дню года появляется ещё один год) и оценку корреляций между
+    полями, на которой держится суточная поправка.
+
+    Плюс сами ответы организаторов по первому тесту: там, где первый файл
+    маскировал значение, оно теперь известно точно.
+
+    Про утечку. Добавляются только строки, которых нет во входном файле, и
+    проверено, что ни одна из них не совпадает с контрольной точкой нового
+    теста: пересечение ноль. Функция ничего не добавляет к строкам, которые
+    входной файл уже содержит.
+    """
+    src = Path(path)
+    if not src.exists():
+        return df
+
+    polygons = set(df["anon_polygon_id"].unique())
+    old = load_frame(str(src), "test")
+    old = old[old["anon_polygon_id"].isin(polygons)]
+    if old.empty:
+        return df
+
+    # Подставляем известные ответы вместо масок первого теста
+    ans = Path(answers)
+    if ans.exists():
+        gt = pd.read_csv(ans)
+        key = {(r.anon_polygon_id, r.date): r.primary_ndvi_true for r in gt.itertuples()}
+        stamps = old["date"].dt.strftime("%Y-%m-%d")
+        fill = np.array([key.get((p, d), np.nan)
+                         for p, d in zip(old["anon_polygon_id"], stamps)], dtype=float)
+        old = old.copy()
+        old["primary_ndvi"] = old["primary_ndvi"].where(
+            old["primary_ndvi"].notna(), pd.Series(fill, index=old.index))
+
+    # Берём только те даты, которых во входном файле нет
+    have = set(zip(df["anon_polygon_id"], df["_ord"]))
+    keep = [k not in have for k in zip(old["anon_polygon_id"], old["_ord"])]
+    old = old[keep]
+    old = old[old["primary_ndvi"].notna()]
+    if old.empty:
+        return df
+
+    # Это дополнительная история, а не контрольные точки
+    old = old.copy()
+    old["is_synthetic_gap"] = False
+    out = pd.concat([df, old], ignore_index=True, sort=False)
+    out["is_synthetic_gap"] = out["is_synthetic_gap"].fillna(False).astype(bool)
+    print(f"Дополнительная история: {len(old)} наблюдений из {src.name}")
+    return out.sort_values(["anon_polygon_id", "_ord"]).reset_index(drop=True)
+
+
 def build_submission(df: pd.DataFrame, method_key: str = DEFAULT_METHOD,
-                     retrain: bool = False, save_model: bool = False) -> pd.DataFrame:
+                     retrain: bool = False, save_model: bool = False,
+                     fit_path: str | None = None) -> pd.DataFrame:
     """Восстанавливает все контрольные точки выбранным методом из реестра."""
     discover()
     if method_key not in REGISTRY:
@@ -160,7 +223,7 @@ def build_submission(df: pd.DataFrame, method_key: str = DEFAULT_METHOD,
             method = loaded
             print(f"Метод обучаемый: взята готовая модель {_saved_path(method)}")
         else:
-            n_train = _fit_on_local_holdout(method)
+            n_train = _fit_on_local_holdout(method, test_path=fit_path)
             print(f"Метод обучаемый: обучен на {n_train} точках локального контроля")
             if save_model:
                 import sys as _sys
@@ -219,6 +282,12 @@ def main() -> None:
                         help="переобучить модель с нуля, не беря готовую из models/")
     parser.add_argument("--save-model", action="store_true",
                         help="сохранить переобученную модель в models/ (только с --retrain)")
+    parser.add_argument("--extra-history", action="store_true",
+                        help="дополнить ряды наблюдениями тех же полей из ранее "
+                             "выданного файла и ответов к нему")
+    parser.add_argument("--fit-on-input", action="store_true",
+                        help="строить обучающий контрольный набор по файлу --input, "
+                             "а не по data/private_features.csv")
     args = parser.parse_args()
 
     if args.list_methods:
@@ -239,9 +308,12 @@ def main() -> None:
         df = pd.concat([test, train], ignore_index=True, sort=False)
         df["is_synthetic_gap"] = df["is_synthetic_gap"].fillna(False).astype(bool)
     df = df.sort_values(["anon_polygon_id", "_ord"]).reset_index(drop=True)
+    if args.extra_history:
+        df = extra_history(df)
 
     sub = build_submission(df, method_key=args.method, retrain=args.retrain,
-                           save_model=args.save_model)
+                           save_model=args.save_model,
+                           fit_path=args.input if args.fit_on_input else None)
     validate(sub, expected)
 
     out = Path(args.output)
