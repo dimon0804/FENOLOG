@@ -102,6 +102,13 @@ def analyse_one(parcel: dict, years: int, max_scenes: int | None) -> dict:
             "seconds": round(time.perf_counter() - t0, 1),
             "top_cause": (max(result.anomalies, key=lambda a: -a.min_zscore).cause
                           if result.anomalies else None),
+            # Оценка риска и прогноз — то, ради чего портфельный взгляд и нужен
+            # банку со страховой: не «что было», а «чего ждать и насколько
+            # надёжен этот объект».
+            "score": (result.meta.get("score") or {}).get("score"),
+            "grade": (result.meta.get("score") or {}).get("grade"),
+            "risk": (result.meta.get("forecast") or {}).get("risk"),
+            "forecast": (result.meta.get("forecast") or {}).get("summary"),
             "explanation": (min(result.anomalies, key=lambda a: a.min_zscore).explanation
                             if result.anomalies else ""),
             "geometry": parcel["geometry"],
@@ -193,17 +200,42 @@ def main() -> None:
     if problem:
         print()
         print("ПОЛЯ, ТРЕБУЮЩИЕ ВНИМАНИЯ")
-        print(f"{'поле':<26} {'га':>8} {'z':>7}  причина")
-        print("-" * 78)
+        print(f"{'поле':<26} {'га':>8} {'z':>7} {'балл':>5} {'риск':<10} причина")
+        print("-" * 92)
         for r in problem[:15]:
             print(f"{r['id'][:26]:<26} {r.get('area_ha', 0):>8.1f} "
-                  f"{(r.get('worst_z') if r.get('worst_z') is not None else 0):>7.2f}  "
+                  f"{(r.get('worst_z') if r.get('worst_z') is not None else 0):>7.2f} "
+                  f"{(r.get('score') if r.get('score') is not None else 0):>5} "
+                  f"{(r.get('risk') or '—'):<10} "
                   f"{r.get('top_cause') or '—'}")
         worst = problem[0]
         if worst.get("explanation"):
             print()
             print(f"Худшее поле {worst['id']}:")
             print(f"  {worst['explanation']}")
+
+    # Портфельный срез по оценке риска: то, что банк смотрит первым
+    scored = [r for r in rows if r.get("score") is not None]
+    if scored:
+        by_grade: dict[str, list] = {}
+        for r in scored:
+            by_grade.setdefault(r["grade"], []).append(r)
+        print()
+        print("ОЦЕНКА ПОРТФЕЛЯ")
+        print(f"{'класс':<8} {'полей':>7} {'площадь, га':>14} {'средний балл':>14}")
+        print("-" * 92)
+        for grade in ("A", "B", "C", "D", "E"):
+            g = by_grade.get(grade)
+            if not g:
+                continue
+            avg = sum(x["score"] for x in g) / len(g)
+            area = sum(x.get("area_ha", 0) for x in g)
+            print(f"{grade:<8} {len(g):>7} {area:>14,.0f} {avg:>14.0f}".replace(",", " "))
+        weak = [r for r in scored if r["score"] < 55]
+        if weak:
+            print()
+            print(f"Ниже порога надёжности (балл < 55): {len(weak)} полей на "
+                  f"{sum(x.get('area_ha', 0) for x in weak):,.0f} га".replace(",", " "))
 
     elapsed = time.perf_counter() - t_all
     obs = sum(r.get("observations", 0) for r in rows)

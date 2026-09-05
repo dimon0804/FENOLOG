@@ -34,6 +34,7 @@ import logging
 import math
 import os
 import threading
+import hashlib
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -43,6 +44,7 @@ from typing import Any, Callable, Iterable, Sequence
 import numpy as np
 
 from src.contracts import Observation
+from src.providers.cache import cache_get, cache_set
 
 log = logging.getLogger(__name__)
 
@@ -266,7 +268,7 @@ ProgressFn = Callable[[str, int, int], None]
 # Публичный интерфейс
 # --------------------------------------------------------------------------------------
 
-def fetch_observations(
+def _fetch_observations_uncached(
     geometry: dict,
     start: date,
     end: date,
@@ -1327,3 +1329,73 @@ if __name__ == "__main__":  # pragma: no cover
 
     # Настоящее поле южнее города — на нём и проверяется физичность ряда.
     run("поле, 40.10/46.95", square(40.10, 46.95))
+
+
+# --------------------------------------------------------------------------- #
+# Кэш
+# --------------------------------------------------------------------------- #
+
+# Срок жизни записи. Две недели — компромисс: архив снимков пополняется, и через
+# месяц кэш начнёт скрывать свежие сцены, но в пределах хакатона и рабочей сессии
+# агронома данные не устаревают.
+SATELLITE_TTL_DAYS = 14
+
+
+def _cache_key(geometry: dict, start: date, end: date,
+               max_scenes: int | None, source: str | None) -> dict:
+    """Ключ кэша. Геометрия округляется до шести знаков — это около 10 см на
+    местности, мельче любого осмысленного различия между контурами, зато два
+    одинаковых полигона с разным «хвостом» в float попадают в одну запись."""
+    try:
+        shape = _to_shapely(geometry)
+        bounds = [round(v, 6) for v in shape.bounds]
+        wkt_hash = hashlib.sha256(shape.wkt.encode("utf-8")).hexdigest()[:16]
+    except Exception:  # noqa: BLE001 — ключ не должен ронять вызов
+        bounds, wkt_hash = [], repr(geometry)[:120]
+    return {
+        "bounds": bounds,
+        "shape": wkt_hash,
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "max_scenes": max_scenes,
+        "source": source or os.environ.get("FENOLOG_SATELLITE_SOURCE") or "auto",
+    }
+
+
+def fetch_observations(
+    geometry: dict,
+    start: date,
+    end: date,
+    progress: ProgressFn | None = None,
+    max_scenes: int | None = None,
+    source: str | None = None,
+    use_cache: bool = True,
+) -> list[Observation]:
+    """Наблюдения NDVI по контуру, с кэшом на диске.
+
+    Кэшируется только непустой результат: пустой список чаще всего означает, что
+    источник в этот момент не ответил, и запоминать такой ответ на две недели —
+    значит закрепить временный сбой навсегда.
+
+    use_cache=False принудительно идёт в сеть, минуя кэш; сам результат при этом
+    в кэш кладётся. Нужно, когда надо проверить, не изменился ли архив.
+    """
+    key = _cache_key(geometry, start, end, max_scenes, source)
+
+    if use_cache:
+        hit = cache_get("satellite_ndvi", key)
+        if hit:
+            if progress:
+                try:
+                    progress("снимки из кэша", len(hit), len(hit))
+                except Exception:  # noqa: BLE001
+                    pass
+            log.info("satellite: %d наблюдений из кэша", len(hit))
+            return hit
+
+    obs = _fetch_observations_uncached(
+        geometry, start, end, progress=progress, max_scenes=max_scenes, source=source
+    )
+    if obs:
+        cache_set("satellite_ndvi", key, obs, ttl_days=SATELLITE_TTL_DAYS)
+    return obs
