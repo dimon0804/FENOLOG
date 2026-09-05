@@ -28,6 +28,10 @@ async function request(path, options = {}) {
 export const api = {
   health: () => request('/api/providers/health'),
 
+  summary: () => request('/api/summary'),
+
+  polygon: (id) => request(`/api/polygons/${id}`),
+
   searchRegion: (q) => request(`/api/regions/search?q=${encodeURIComponent(q)}&limit=6`),
 
   discover: (bbox, limit = 60) =>

@@ -76,24 +76,24 @@ export default function SeriesChart({ series, anomalies, activeAnomaly, onPickAn
     <div className="card">
       <h3>Вегетационный индекс NDVI</h3>
       <div className="legend">
-        <span><i className="dotmark" style={{ background: '#23241f' }} /> наблюдения со снимков</span>
-        <span><i style={{ borderTopColor: '#3f7d4e' }} /> восстановленный ряд</span>
-        {hasBand && <span><i className="band" style={{ background: 'rgba(63,125,78,0.16)' }} /> норма ±2σ, апрель—октябрь</span>}
+        <span><i className="dotmark" style={{ background: '#101010' }} /> наблюдения со снимков</span>
+        <span><i style={{ borderTopColor: '#2f6b2a' }} /> восстановленный ряд</span>
+        {hasBand && <span><i className="band" style={{ background: 'rgba(47,107,42,0.16)' }} /> норма ±2σ, апрель—октябрь</span>}
         <span><i className="band" style={{ background: SEVERITY.suppression.soft }} /> угнетение</span>
         <span><i className="band" style={{ background: SEVERITY.critical.soft }} /> критическая аномалия</span>
       </div>
 
       <ResponsiveContainer width="100%" height={320}>
         <ComposedChart data={data} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
-          <CartesianGrid stroke="#e8e5df" vertical={false} />
+          <CartesianGrid stroke="#eeeeee" vertical={false} />
           <XAxis
             dataKey="t"
             type="number"
             scale="time"
             domain={['dataMin', 'dataMax']}
             tickFormatter={(t) => new Date(t).toLocaleDateString('ru-RU', { month: 'short', year: '2-digit' })}
-            tick={{ fontSize: 11, fill: '#6d6c64' }}
-            stroke="#cfcabf"
+            tick={{ fontSize: 11, fill: '#6f6f6f' }}
+            stroke="#dddddd"
             minTickGap={40}
           />
           <YAxis
@@ -102,8 +102,8 @@ export default function SeriesChart({ series, anomalies, activeAnomaly, onPickAn
             // пределы, и на оси появляются подписи вроде 1,49 и −0,000006.
             allowDataOverflow
             tickFormatter={(v) => v.toFixed(1)}
-            tick={{ fontSize: 11, fill: '#6d6c64' }}
-            stroke="#cfcabf"
+            tick={{ fontSize: 11, fill: '#6f6f6f' }}
+            stroke="#dddddd"
             tickCount={6}
             width={34}
           />
@@ -131,7 +131,7 @@ export default function SeriesChart({ series, anomalies, activeAnomaly, onPickAn
             <Area
               dataKey="band"
               stroke="none"
-              fill="#3f7d4e"
+              fill="#2f6b2a"
               fillOpacity={0.13}
               isAnimationActive={false}
               connectNulls={false}
@@ -140,7 +140,7 @@ export default function SeriesChart({ series, anomalies, activeAnomaly, onPickAn
 
           <Line
             dataKey="restored"
-            stroke="#3f7d4e"
+            stroke="#2f6b2a"
             strokeWidth={1.8}
             dot={false}
             isAnimationActive={false}
@@ -152,7 +152,7 @@ export default function SeriesChart({ series, anomalies, activeAnomaly, onPickAn
           <Scatter
             data={observedPoints}
             dataKey="observed"
-            fill="#23241f"
+            fill="#101010"
             shape="circle"
             isAnimationActive={false}
           />

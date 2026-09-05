@@ -1,30 +1,50 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { api, pollTask } from './api.js'
-import { CLIMATOLOGY, SENSOR, formatDate } from './dict.js'
-import AnomalyFeed from './components/AnomalyFeed.jsx'
-import MapPanel from './components/MapPanel.jsx'
-import SeriesChart from './components/SeriesChart.jsx'
+import Analytics from './components/Analytics.jsx'
+import Fields from './components/Fields.jsx'
+import MapWorkspace from './components/MapWorkspace.jsx'
+import Overview from './components/Overview.jsx'
+import Reports from './components/Reports.jsx'
 import Sidebar from './components/Sidebar.jsx'
-import SourcesHealth from './components/SourcesHealth.jsx'
-import WeatherPanel from './components/WeatherPanel.jsx'
+import Topbar from './components/Topbar.jsx'
+
+const VERSION = '1.0'
+
+// Заголовок и подзаголовок каждого раздела. Держим в одном месте: они попадают
+// и в шапку, и в логику раздела, и расхождение между ними сразу заметно.
+const TITLES = {
+  overview: ['Добро пожаловать', 'Независимые данные и прогнозы для вашего агробизнеса'],
+  map: ['Карта', 'Найдите готовый контур или нарисуйте свой — дальше сервис всё сделает сам'],
+  fields: ['Участки', 'Сохранённые поля: пересчёт, переименование, удаление'],
+  analytics: ['Аналитика', 'Сводка по хозяйству и сравнение полей между собой'],
+  reports: ['Отчёты', 'Выгрузка ряда и найденных периодов файлом'],
+}
 
 /**
- * Один экран на весь сценарий.
+ * Оболочка приложения: тёмная колонка разделов, шапка и рабочее поле.
  *
- * Путь пользователя: найти регион -> найти в нём готовые контуры или нарисовать
- * свой -> запустить анализ -> увидеть ряд, периоды и их объяснение -> сохранить
- * поле, чтобы вернуться к нему позже. Оба способа задать территорию сходятся в
- * одну ветку: дальше сервису всё равно, откуда взялся контур.
+ * Состояние держится здесь целиком, а не по разделам: выбранное поле и его
+ * разбор нужны и карте, и аналитике, и отчётам. Разносить его по экранам
+ * значило бы пересчитывать одно и то же при каждом переходе.
  */
 export default function App() {
-  const [polygons, setPolygons] = useState([])
-  const [selected, setSelected] = useState(null)      // сохранённый участок
-  const [draft, setDraft] = useState(null)            // ещё не сохранённый контур
+  const [section, setSection] = useState('overview')
+
+  const [summary, setSummary] = useState(null)
+  const [health, setHealth] = useState(null)
+
+  const [selected, setSelected] = useState(null) // сохранённый участок
+  const [draft, setDraft] = useState(null) // ещё не сохранённый контур
+  const [result, setResult] = useState(null)
+  const [activeAnomaly, setActiveAnomaly] = useState(null)
+  const [task, setTask] = useState(null)
+  const [error, setError] = useState(null)
 
   const [places, setPlaces] = useState([])
   const [searching, setSearching] = useState(false)
   const [searchNote, setSearchNote] = useState(null)
+  const [region, setRegion] = useState(null)
   const [regionOutline, setRegionOutline] = useState(null)
   const [flyTo, setFlyTo] = useState(null)
 
@@ -32,16 +52,23 @@ export default function App() {
   const [discovering, setDiscovering] = useState(false)
   const [discoverNote, setDiscoverNote] = useState(null)
 
-  const [task, setTask] = useState(null)
-  const [result, setResult] = useState(null)
-  const [activeAnomaly, setActiveAnomaly] = useState(null)
-  const [error, setError] = useState(null)
+  const [years, setYears] = useState(5)
 
-  const reloadPolygons = useCallback(
-    () => api.listPolygons().then((r) => setPolygons(r.polygons)).catch(() => {}),
+  const reload = useCallback(
+    () => api.summary().then(setSummary).catch(() => {}),
     [],
   )
-  useEffect(() => { reloadPolygons() }, [reloadPolygons])
+  useEffect(() => { reload() }, [reload])
+
+  // Состояние источников опрашиваем раз в минуту: ровно столько живёт кэш
+  // проверки на сервере, чаще спрашивать бессмысленно.
+  useEffect(() => {
+    let alive = true
+    const load = () => api.health().then((h) => alive && setHealth(h)).catch(() => {})
+    load()
+    const timer = setInterval(load, 60000)
+    return () => { alive = false; clearInterval(timer) }
+  }, [])
 
   const geometry = draft?.geometry || selected?.geometry || null
 
@@ -67,9 +94,11 @@ export default function App() {
   }
 
   function pickPlace(place) {
-    setFlyTo({ bbox: place.bbox, at: Date.now() })
+    setRegion(place.name.split(',')[0])
     setRegionOutline(place.geometry)
+    setFlyTo({ bbox: place.bbox, at: Date.now() })
     setPlaces([])
+    setSection('map')
   }
 
   // -------------------------------------------------------------- поиск полей
@@ -117,13 +146,14 @@ export default function App() {
     setError(null)
     setResult(null)
     setActiveAnomaly(null)
+    setSection('map')
     try {
       const started = await starter()
       setTask(started.task)
       const finished = await pollTask(started.task.id, setTask)
       setTask(finished)
       setResult(finished.result)
-      reloadPolygons()
+      reload()
     } catch (e) {
       setError(e.message)
       setTask(null)
@@ -138,35 +168,43 @@ export default function App() {
         name: draft.name || null,
         source: draft.source,
         external_id: draft.external_id,
+        years,
         save,
       })
       if (response.polygon) {
         setSelected(response.polygon)
         setDraft(null)
-        await reloadPolygons()
+        await reload()
       }
       return response
     })
 
-  const analyzeSaved = (polygon) => runAnalysis(() => api.analyzePolygon(polygon.id, {}))
+  const analyzeSaved = (field) =>
+    runAnalysis(async () => {
+      const polygon = field.geometry ? field : await api.polygon(field.id)
+      setSelected(polygon)
+      setDraft(null)
+      return api.analyzePolygon(polygon.id, { years })
+    })
 
-  async function selectPolygon(polygon) {
-    setSelected(polygon)
+  /** Открыть сохранённый участок: карта летит к нему, разбор приходит с диска. */
+  async function openField(field) {
     setDraft(null)
     setParcels([])
     setActiveAnomaly(null)
     setTask(null)
     setError(null)
-    setFlyTo({ bbox: bboxOf(polygon.geometry), at: Date.now() })
-    // Прошлый анализ показывается сразу и без сети до самого конца: возвращаться
-    // к полю и каждый раз ждать минуту сбора — ровно то, ради чего результат и
-    // кладётся на диск. У поля, которое ещё не считали, результата заведомо нет —
-    // не спрашиваем, чтобы не сорить четырёхсотыми в консоли.
-    if (!polygon.last_analyzed_at) {
-      setResult(null)
-      return
-    }
     try {
+      const polygon = field.geometry ? field : await api.polygon(field.id)
+      setSelected(polygon)
+      setFlyTo({ bbox: bboxOf(polygon.geometry), at: Date.now() })
+      setSection('map')
+      // Поле, которое ещё не считали, результата заведомо не имеет — не
+      // спрашиваем, чтобы не сорить четырёхсотыми в консоли.
+      if (!polygon.last_analyzed_at) {
+        setResult(null)
+        return
+      }
       const saved = await api.savedResult(polygon.id)
       setResult(saved.result)
     } catch {
@@ -174,216 +212,106 @@ export default function App() {
     }
   }
 
-  async function renamePolygon(id, name) {
+  async function renameField(id, name) {
     await api.renamePolygon(id, name)
-    await reloadPolygons()
+    await reload()
     if (selected?.id === id) setSelected({ ...selected, name })
   }
 
-  async function deletePolygon(polygon) {
-    if (!window.confirm(`Удалить участок «${polygon.name}»?`)) return
-    await api.deletePolygon(polygon.id)
-    if (selected?.id === polygon.id) {
+  async function deleteField(field) {
+    if (!window.confirm(`Удалить участок «${field.name}»?`)) return
+    await api.deletePolygon(field.id)
+    if (selected?.id === field.id) {
       setSelected(null)
       setResult(null)
     }
-    reloadPolygons()
+    reload()
   }
 
-  const anomalies = result?.anomalies || []
-  // Нарисованный контур имени ещё не имеет, но он уже выбран — заголовок
-  // «Поле не выбрано» над строкой «нарисован вручную» противоречит сам себе.
-  const title =
-    selected?.name || draft?.name || (draft ? 'Новый контур' : 'Поле не выбрано')
+  const [titleBase, subtitle] = TITLES[section]
+  const title = section === 'overview' ? `${titleBase}!` : titleBase
+
+  const shared = {
+    draft, selected, result, task, error, years,
+    onAnalyzeDraft: analyzeDraft,
+    onAnalyzeSaved: analyzeSaved,
+    onDraftName: (name) => setDraft({ ...draft, name }),
+    activeAnomaly, setActiveAnomaly,
+  }
 
   return (
-    <div className="app">
-      <header className="topbar">
-        <h1>Фенолог</h1>
-        <span className="subtitle">мониторинг вегетационной динамики</span>
-        <span className="spacer" />
-        <SourcesHealth />
-      </header>
+    <div className="shell">
+      <Sidebar
+        section={section}
+        onSection={setSection}
+        health={health}
+        fieldsCount={summary?.polygons || 0}
+        version={VERSION}
+      />
 
-      <div className="workspace">
-        <Sidebar
-          polygons={polygons}
-          selectedId={selected?.id}
-          onSelect={selectPolygon}
-          onRename={renamePolygon}
-          onDelete={deletePolygon}
-          onSearch={searchRegion}
+      <div className="main">
+        <Topbar
+          title={title}
+          subtitle={subtitle}
+          region={region}
+          onSearchRegion={searchRegion}
           places={places}
           searching={searching}
           onPickPlace={pickPlace}
           searchNote={searchNote}
+          years={years}
+          onYears={setYears}
+          health={health}
+          warnings={task?.warnings}
         />
 
-        <div className="stage">
-          <MapPanel
-            parcels={parcels}
-            selectedGeometry={geometry}
-            regionOutline={regionOutline}
-            flyTo={flyTo}
-            onPickParcel={pickParcel}
-            onDrawn={onDrawn}
-            onDiscover={discover}
-            discovering={discovering}
-            discoverNote={discoverNote}
-          />
-
-          <div className="analysis">
-            <div className="charts">
-              <FieldHeader
-                title={title}
-                draft={draft}
-                selected={selected}
-                result={result}
-                task={task}
-                error={error}
-                onAnalyzeDraft={analyzeDraft}
-                onAnalyzeSaved={analyzeSaved}
-                onDraftName={(name) => setDraft({ ...draft, name })}
-              />
-
-              {result && (
-                <>
-                  <SeriesChart
-                    series={result.series}
-                    anomalies={anomalies}
-                    activeAnomaly={activeAnomaly}
-                    onPickAnomaly={setActiveAnomaly}
-                  />
-                  <WeatherPanel
-                    weather={result.weather}
-                    anomalies={anomalies}
-                    activeAnomaly={activeAnomaly}
-                  />
-                </>
-              )}
-            </div>
-
-            <div className="feed">
-              {result ? (
-                <AnomalyFeed
-                  anomalies={anomalies}
-                  active={activeAnomaly}
-                  onPick={(index) => setActiveAnomaly(activeAnomaly === index ? null : index)}
-                  climatologySource={result.meta?.climatology_source}
-                />
-              ) : (
-                <div className="empty">
-                  Здесь появятся негативные аномальные периоды и объяснение их причины.
-                </div>
-              )}
-            </div>
+        {section === 'map' ? (
+          <div className="canvas">
+            <MapWorkspace
+              {...shared}
+              parcels={parcels}
+              geometry={geometry}
+              regionOutline={regionOutline}
+              flyTo={flyTo}
+              onPickParcel={pickParcel}
+              onDrawn={onDrawn}
+              onDiscover={discover}
+              discovering={discovering}
+              discoverNote={discoverNote}
+            />
           </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/** Шапка панели поля: что выбрано, чем это считалось и кнопка запуска. */
-function FieldHeader({ title, draft, selected, result, task, error, onAnalyzeDraft, onAnalyzeSaved, onDraftName }) {
-  const running = task && task.status !== 'done' && task.status !== 'failed'
-  const meta = result?.meta || {}
-  const climatology = CLIMATOLOGY[meta.climatology_source]
-
-  return (
-    <div className="card">
-      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-        <div>
-          <h3 style={{ marginBottom: 2 }}>{title}</h3>
-          <div className="small muted">
-            {draft
-              ? `${draft.source === 'osm' ? 'контур из OpenStreetMap' : 'нарисован вручную'}${
-                  draft.area_ha ? ` · ${draft.area_ha} га` : ''
-                }`
-              : selected
-                ? `${selected.area_ha} га${selected.crop_type ? ` · ${selected.crop_type}` : ''}`
-                : 'Найдите поле на карте или нарисуйте контур'}
-          </div>
-        </div>
-
-        <div className="row">
-          {draft && (
-            <>
-              <input
-                type="text"
-                placeholder="название поля"
-                value={draft.name}
-                style={{ width: 190 }}
-                onChange={(event) => onDraftName(event.target.value)}
-              />
-              <button onClick={() => onAnalyzeDraft(false)} disabled={running}>
-                Только посчитать
-              </button>
-              <button className="primary" onClick={() => onAnalyzeDraft(true)} disabled={running}>
-                Сохранить и посчитать
-              </button>
-            </>
-          )}
-          {selected && !draft && (
-            <button className="primary" onClick={() => onAnalyzeSaved(selected)} disabled={running}>
-              {result ? 'Пересчитать' : 'Проанализировать'}
-            </button>
-          )}
-        </div>
-      </div>
-
-      {running && (
-        <div style={{ marginTop: 12 }}>
-          <div className="row" style={{ justifyContent: 'space-between' }}>
-            <span className="small">{task.stage}</span>
-            <span className="small muted">{task.percent}%</span>
-          </div>
-          <div className="progress"><div style={{ width: `${task.percent}%` }} /></div>
-        </div>
-      )}
-
-      {error && <div className="error-banner" style={{ marginTop: 12 }}>{error}</div>}
-
-      {task?.warnings?.length > 0 && (
-        <div className="error-banner" style={{ marginTop: 12 }}>
-          Часть данных собрать не удалось, разбор построен на остальных:{' '}
-          {task.warnings.join('; ')}
-        </div>
-      )}
-
-      {result && (
-        <div className="row" style={{ marginTop: 12, flexWrap: 'wrap', gap: 10 }}>
-          {climatology && (
-            <span className={`badge ${climatology.tone === 'ok' ? '' : climatology.tone}`} title={climatology.hint}>
-              <span className={`dot ${climatology.tone}`} />
-              {climatology.label}
-            </span>
-          )}
-          <span className="badge">
-            {meta.collected_observations} наблюдений
-            {meta.sources && Object.keys(meta.sources).length > 0 && (
-              <> · {Object.entries(meta.sources).map(([k, v]) => `${SENSOR[k] || k}: ${v}`).join(', ')}</>
+        ) : (
+          <div className="canvas scroll">
+            {section === 'overview' && (
+              <Overview summary={summary} onGoMap={() => setSection('map')} />
             )}
-          </span>
-          <span className="badge">погода: {meta.collected_weather_days} дней</span>
-          <span className="badge">
-            {formatDate(meta.date_from)} — {formatDate(meta.date_to)}
-          </span>
-          <span className="badge">сбор {meta.collect_seconds} с</span>
-        </div>
-      )}
-
-      {result && climatology && climatology.tone !== 'ok' && (
-        <p className="small muted" style={{ marginBottom: 0 }}>{climatology.hint}</p>
-      )}
+            {section === 'fields' && (
+              <Fields
+                summary={summary}
+                selectedId={selected?.id}
+                onOpen={openField}
+                onRename={renameField}
+                onDelete={deleteField}
+                onAnalyze={analyzeSaved}
+                onGoMap={() => setSection('map')}
+              />
+            )}
+            {section === 'analytics' && (
+              <Analytics summary={summary} onOpenField={openField} />
+            )}
+            {section === 'reports' && (
+              <Reports summary={summary} onGoMap={() => setSection('map')} />
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
 
 /** Рамка контура — нужна, чтобы карта перелетела к выбранному участку. */
 function bboxOf(geometry) {
-  const rings =
-    geometry.type === 'Polygon' ? geometry.coordinates : geometry.coordinates.flat()
+  const rings = geometry.type === 'Polygon' ? geometry.coordinates : geometry.coordinates.flat()
   let west = 180, south = 90, east = -180, north = -90
   for (const ring of rings) {
     for (const [lon, lat] of ring) {

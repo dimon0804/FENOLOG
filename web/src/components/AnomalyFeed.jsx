@@ -39,7 +39,7 @@ export default function AnomalyFeed({ anomalies, active, onPick, climatologySour
                 {formatDate(anomaly.start)} — {formatDate(anomaly.end)}
               </span>
               <span
-                className="severity-tag"
+                className="tag"
                 style={{ background: tone.soft, color: tone.color }}
               >
                 {tone.label}
