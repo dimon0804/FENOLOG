@@ -616,10 +616,14 @@ class HashedStaticFiles(StaticFiles):
     IMMUTABLE = "public, max-age=31536000, immutable"
     REVALIDATE = "no-cache"
 
+    # Единственный каталог с хешированными именами. Всё остальное в сборке —
+    # index.html, favicon.svg, воркер в /maplibre/ — носит постоянное имя и
+    # обязано перепроверяться.
+    HASHED_DIR = "/assets/"
+
     def file_response(self, full_path, stat_result, scope, status_code=200):
         response = super().file_response(full_path, stat_result, scope, status_code=status_code)
-        path = scope.get("path", "")
-        hashed = path.startswith("/assets/") and not path.startswith("/maplibre/")
+        hashed = scope.get("path", "").startswith(self.HASHED_DIR)
         response.headers["Cache-Control"] = self.IMMUTABLE if hashed else self.REVALIDATE
         return response
 
