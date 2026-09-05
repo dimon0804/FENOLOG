@@ -664,7 +664,190 @@ input { font: inherit; }
 .table tr.pick { cursor: pointer; }
 .table tr.pick:hover td { background: #fafafa; }
 .table tr.sel td { background: var(--green-soft); }
-.table td.num { font-variant-numeric: tabular-nums; }
+.table td.num, .table th.num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+
+/* ========================================================== раздел «Участки» */
+
+/* Панель над таблицей: поиск, два фильтра и добавление — как в макете. */
+.fields-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 260px;
+  max-width: 380px;
+  height: 44px;
+  padding: 0 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--ink-soft);
+}
+.search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--ink);
+  font-size: 14px;
+}
+.search input::placeholder { color: var(--ink-soft); }
+
+/* Родная стрелка списка у select нарисована браузером и в макет не попадает.
+   Гасим её и рисуем шеврон фоном — той же формы, что у кнопок в шапке. */
+.select {
+  height: 44px;
+  padding: 0 38px 0 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-size: 14px;
+  color: var(--ink);
+  appearance: none;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%236f6f6f' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 6l5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 13px center;
+}
+
+.btn.add { margin-left: auto; height: 44px; padding: 0 20px; }
+
+/* Карточка таблицы: белые шапка и подвал, светлое тело со строками. */
+.table-card { padding: 0; overflow: hidden; }
+.table-card .table-wrap { max-height: min(560px, 62dvh); overflow: auto; }
+.table-card .table { min-width: 720px; }
+.table-card .table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--card);
+  padding: 18px 18px 16px;
+  font-size: 13px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  color: var(--ink);
+}
+.fields-table tbody { background: #f4f4f4; }
+.fields-table td { padding: 12px 18px; border-top: 0; border-bottom: 1px solid #111; }
+.fields-table tbody tr:last-child td { border-bottom: 0; }
+.fields-table tr.pick:hover td { background: #ededed; }
+.fields-table .who { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.fields-table .name {
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.table-foot {
+  padding: 20px 18px;
+  font-size: 15px;
+  font-weight: 700;
+  background: var(--card);
+}
+
+/* Статус словом, а не цветной точкой: на защите читают глазами по диагонали. */
+.status {
+  display: inline-block;
+  min-width: 108px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Спутниковая миниатюра участка. Тайлы лежат в увеличенном квадрате, который
+   сдвинут так, чтобы центр поля пришёлся на середину; лишнее отрезается. */
+.thumb {
+  position: relative;
+  display: block;
+  flex: none;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #dcdcdc;
+}
+.thumb.empty { background: repeating-linear-gradient(45deg, #e2e2e2 0 6px, #d8d8d8 6px 12px); }
+.thumb-grid { position: absolute; inset: 0; }
+.thumb-grid img { position: absolute; display: block; }
+
+/* Культура живёт в отдельном столбце, а в узком окне переезжает под название:
+   столбцов шесть, и первым лишним становится именно она. */
+.crop-inline { display: none; }
+
+.row-menu { position: relative; display: flex; justify-content: flex-end; }
+.row-menu .dots {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--ink-soft);
+}
+.row-menu .dots:hover { background: #e2e2e2; color: var(--ink); }
+.menu-row.danger { color: var(--critical); }
+
+/* ======================================================== раздел «Аналитика» */
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.kpi {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 18px 20px 12px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.kpi .label { font-size: 14px; color: var(--ink-soft); }
+.kpi .value {
+  font-size: clamp(28px, 2.6vw, 40px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  margin-top: 6px;
+}
+.kpi .value .unit { font-size: 0.52em; font-weight: 700; letter-spacing: 0; }
+.kpi .note { font-size: 13.5px; font-weight: 600; margin-top: 6px; min-height: 18px; }
+.kpi .note.up { color: var(--green); }
+.kpi .note.down { color: var(--critical); }
+.kpi .note.bad { color: var(--critical); }
+.kpi .note.muted { color: var(--ink-soft); font-weight: 500; }
+/* Мини-график прижат к низу карточки: иначе у карточек с разной длиной подписи
+   он встаёт на разной высоте, и ряд перестаёт читаться как ряд. */
+.kpi .spark { margin-top: auto; padding-top: 10px; }
+
+.analytics-row {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 18px;
+  margin-top: 18px;
+}
+.analytics-row .card { margin: 0; }
+.analytics-row .card + .card { margin-top: 0; }
+
+.zones { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+.zone-legend { flex: 1; min-width: 150px; display: flex; flex-direction: column; gap: 14px; }
+.zone-row { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.zone-row .dot { width: 12px; height: 12px; }
+.zone-row .zone-name { flex: 1; }
+.zone-row b { font-variant-numeric: tabular-nums; }
 
 /* ================================================================== адаптив */
 
@@ -686,6 +869,15 @@ input { font: inherit; }
 @media (max-width: 1200px) {
   :root { --nav-width: 232px; }
   .topbar h1 { font-size: 23px; }
+  /* Четыре показателя в ряд перестают помещаться раньше остальных карточек:
+     число в них крупное, а подпись длинная. */
+  .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .col-crop { display: none; }
+  .crop-inline { display: inline; }
+  .table-card .table { min-width: 560px; }
+  .table-card .table thead th { padding: 14px 14px 12px; }
+  .fields-table td { padding: 10px 14px; }
+  .status { min-width: 92px; padding: 6px 10px; font-size: 13px; }
 
   /* Карточки показателей разворачиваются в строки: значок слева, подпись и
      число посередине, изменение справа.
@@ -718,6 +910,7 @@ input { font: inherit; }
   /* Два блока рядом перестают помещаться: в «Недавней активности» имя поля и
      время начинают наезжать друг на друга. Ставим их друг под друга. */
   .overview-bottom { grid-template-columns: 1fr; gap: 14px; }
+  .analytics-row { grid-template-columns: 1fr; gap: 14px; }
   .nav { padding: 16px 12px; gap: 14px; }
   .nav-item { padding: 10px 12px; font-size: 14.5px; gap: 11px; }
   .nav-item svg { width: 19px; height: 19px; }
@@ -769,6 +962,9 @@ input { font: inherit; }
 
   .topbar h1 { font-size: 20px; }
   .topbar .sub { display: none; }
+  .kpi-grid { grid-template-columns: 1fr; }
+  .fields-bar .search { max-width: none; }
+  .btn.add { margin-left: 0; width: 100%; }
   .pill { height: 40px; padding: 0 12px; font-size: 13px; }
   .quickstart { padding: 22px 20px; }
   .quickstart h2 { font-size: 22px; }

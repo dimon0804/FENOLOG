@@ -105,6 +105,27 @@ export const IconPencil = (p) => (
   </svg>
 )
 
+export const IconSearch = (p) => (
+  <svg {...base} width="18" height="18" {...p}>
+    <circle cx="11" cy="11" r="6.4" />
+    <path d="M15.6 15.6 20 20" />
+  </svg>
+)
+
+export const IconPlus = (p) => (
+  <svg {...base} width="18" height="18" {...p}>
+    <path d="M12 5v14M5 12h14" />
+  </svg>
+)
+
+export const IconDots = (p) => (
+  <svg {...base} width="18" height="18" {...p}>
+    <circle cx="5.5" cy="12" r="1.4" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+    <circle cx="18.5" cy="12" r="1.4" fill="currentColor" stroke="none" />
+  </svg>
+)
+
 export const IconUser = (p) => (
   <svg {...base} width="18" height="18" {...p}>
     <circle cx="12" cy="8.5" r="3.6" />
