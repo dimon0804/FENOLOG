@@ -34,7 +34,7 @@ from src.api.schemas import (
     PolygonPatch,
 )
 from src.api.storage import store
-from src.api.tasks import drop_result, load_result, manager
+from src.api.tasks import drop_result, load_result, load_summary, manager
 
 logging.basicConfig(
     level=logging.INFO,
@@ -106,6 +106,54 @@ def health() -> dict:
 def api_providers_health(force: bool = Query(False, description="проверить заново, минуя кэш")) -> dict:
     """Состояние внешних источников и следствия их отказа."""
     return providers_health(force=force)
+
+
+@app.get("/api/summary", tags=["служебное"])
+def summary() -> dict:
+    """Сводка по всем сохранённым участкам — то, что показывает экран «Обзор».
+
+    Считается по выжимкам разборов, а не по самим разборам: полный ряд за пять
+    сезонов весит сотни килобайт на поле, и собирать их все ради трёх чисел на
+    дашборде значило бы гонять мегабайты на каждое открытие экрана.
+    """
+    polygons = store.list_all()
+    fields, total, critical, suppression = [], 0, 0, 0
+    last_analyzed = None
+
+    for polygon in polygons:
+        digest = load_summary(polygon["id"])
+        if digest:
+            total += digest["anomalies"]
+            critical += digest["critical"]
+            suppression += digest["suppression"]
+        stamp = polygon.get("last_analyzed_at")
+        if stamp and (last_analyzed is None or stamp > last_analyzed):
+            last_analyzed = stamp
+        fields.append({
+            "id": polygon["id"],
+            "name": polygon["name"],
+            "area_ha": polygon["area_ha"],
+            "crop_type": polygon.get("crop_type"),
+            "source": polygon.get("source"),
+            "center": polygon.get("center"),
+            "last_analyzed_at": stamp,
+            "summary": digest,
+        })
+
+    # Худшие поля наверх: агроному нужно сразу видеть, где хуже всего, а не
+    # листать список в порядке добавления.
+    fields.sort(key=lambda f: (f["summary"] or {}).get("worst_zscore") or 0.0)
+
+    analyzed = sum(1 for f in fields if f["summary"])
+    return {
+        "polygons": len(polygons),
+        "analyzed": analyzed,
+        "pending": len(polygons) - analyzed,
+        "anomalies": {"total": total, "critical": critical, "suppression": suppression},
+        "last_analyzed_at": last_analyzed,
+        "total_area_ha": round(sum(p["area_ha"] for p in polygons), 1),
+        "fields": fields,
+    }
 
 
 # --------------------------------------------------------------------------------------
