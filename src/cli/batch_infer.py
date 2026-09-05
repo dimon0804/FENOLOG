@@ -98,8 +98,12 @@ def _fit_on_local_holdout(method, seed: int = SEED, test_path: str | None = None
     # наблюдений: в новом тесте четверть точек приходится на годы до 2017-го,
     # когда Sentinel-2 не было вовсе, и обучение на старом файле готовит модель
     # не к той задаче.
+    # Когда учимся по входному файлу, подмешивать train_dataset не нужно и
+    # вредно по времени: его поля с полями нового теста не пересекаются вовсе,
+    # обучающих точек по ним не построишь, а кадр раздувается со ста пятидесяти
+    # тысяч строк вместо пятидесяти — и построение набора идёт втрое дольше.
     df_v, masked, views_v, points_v, _templates, _hidden = prepare(
-        use_train=True, hide_frac=0.20, seed=seed, test_path=test_path)
+        use_train=test_path is None, hide_frac=0.20, seed=seed, test_path=test_path)
     context = {"df": masked, "raw": df_v, "points": points_v}
     context["base_preds"] = _stateless_predictions(points_v, views_v, context)
     context["train_mask"] = np.ones(len(points_v), dtype=bool)
