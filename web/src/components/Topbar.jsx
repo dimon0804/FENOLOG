@@ -50,14 +50,16 @@ export default function Topbar({
 
   return (
     <header className="topbar" ref={wrap}>
-      <div>
+      <div className="topbar-title">
         <h1>{title}</h1>
         {subtitle && <div className="sub">{subtitle}</div>}
       </div>
 
-      <span className="spacer" />
-
-      {/* Регион */}
+      {/* Управление держится одной группой: по отдельности элементы
+          переносятся поодиночке, и колокольчик уезжает на вторую строку один,
+          как будто что-то сломалось. */}
+      <div className="topbar-actions">
+        {/* Регион */}
       <div className="pill-wrap">
         <button className="pill" onClick={() => setOpen(open === 'region' ? null : 'region')}>
           <IconPin width={18} height={18} />
@@ -160,6 +162,7 @@ export default function Topbar({
             )}
           </div>
         )}
+        </div>
       </div>
     </header>
   )
