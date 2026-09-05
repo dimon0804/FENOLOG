@@ -250,6 +250,69 @@ def _jsonable(value):
     return str(value)
 
 
+# Окно, по которому определяется СЕГОДНЯШНЕЕ состояние поля. Тридцать дней —
+# компромисс: короче окно слишком чувствительно к одному облачному снимку,
+# длиннее — размазывает свежую просадку по благополучным неделям.
+CURRENT_WINDOW_DAYS = 30
+
+# Вегетационный сезон. Вне его вопрос «что с полем сейчас» смысла не имеет:
+# растительности нет, и любое отклонение — это снег и остатки стерни.
+CURRENT_SEASON_MONTHS = (4, 10)
+
+
+def _current_state(series: list) -> dict:
+    """Состояние поля на последних данных, а не за всю историю.
+
+    Зачем отдельно. Список аномалий копится за все сезоны, и признак
+    «была хоть одна критическая» через пять лет наблюдений верен почти для
+    любого поля. Карта, закрашенная по нему, окрашивала все поля в красный и
+    переставала отвечать на единственный вопрос, ради которого её открывают:
+    что с полем сейчас.
+    """
+    points = []
+    for p in series:
+        z = p.get("zscore")
+        raw = p.get("date")
+        if z is None or not raw:
+            continue
+        try:
+            d = date.fromisoformat(str(raw)[:10])
+        except ValueError:
+            continue
+        points.append((d, float(z), not p.get("is_restored")))
+    if not points:
+        return {"severity": None, "reason": "нет z-оценки: не с чем сравнивать"}
+
+    points.sort()
+    last = points[-1][0]
+    window = [
+        (d, z, obs) for d, z, obs in points
+        if (last - d).days <= CURRENT_WINDOW_DAYS
+        and CURRENT_SEASON_MONTHS[0] <= d.month <= CURRENT_SEASON_MONTHS[1]
+    ]
+    if not window:
+        return {
+            "severity": None,
+            "as_of": last.isoformat(),
+            "reason": "последние данные вне вегетационного сезона",
+        }
+
+    worst = min(z for _, z, _ in window)
+    # Пороги те же, что у ядра и в постановке (src/contracts.py):
+    # z >= -1 норма, -2 <= z < -1 угнетение, z < -2 критическая аномалия.
+    severity = "critical" if worst < -2 else ("suppression" if worst < -1 else "normal")
+    return {
+        "severity": severity,
+        "zscore": round(worst, 2),
+        "as_of": last.isoformat(),
+        "window_days": CURRENT_WINDOW_DAYS,
+        # Сколько дней окна закрыто настоящими снимками. Если один-два, вывод
+        # опирается в основном на достроенный ряд, и это надо показывать.
+        "observed_days": sum(1 for _, _, obs in window if obs),
+        "days": len(window),
+    }
+
+
 def summarize(payload: dict) -> dict:
     """Выжимка из разбора: то, что нужно сводке и списку участков.
 
@@ -278,6 +341,9 @@ def summarize(payload: dict) -> dict:
         "sources": meta.get("sources") or {},
         "failures": meta.get("failures") or [],
         "last_anomaly": anomalies[0].get("end") if anomalies else None,
+        # Состояние на последних данных. Именно по нему красится карта: счётчики
+        # critical/suppression выше — это вся история поля, а не сегодняшний день.
+        "current": _current_state(series),
     }
 
 
@@ -299,17 +365,26 @@ def _save_result(polygon_id: str, payload: dict) -> None:
         log.warning("не удалось сохранить результат по %s: %s", polygon_id, exc)
 
 
+# Поля, которые обязаны быть в выжимке. Появление нового поля означает, что
+# выжимки, сохранённые до него, устарели: их надо пересчитать из полного
+# разбора, а не показывать пользователю картину без него.
+_DIGEST_KEYS = ("current",)
+
+
 def load_summary(polygon_id: str) -> dict | None:
     """Выжимка по участку. None — участок ещё не анализировался.
 
-    Если выжимки нет, а полный разбор есть — считаем и дописываем. Так разборы,
-    сделанные до появления выжимок, не превращаются в «поле не анализировалось»
-    и пользователю не приходится пересчитывать их заново.
+    Если выжимки нет или она старого образца, а полный разбор есть — считаем и
+    дописываем. Так разборы, сделанные раньше, не превращаются в «поле не
+    анализировалось» и не застревают на старом наборе полей: пересчёт идёт по
+    сохранённому ряду, заново собирать снимки не нужно.
     """
     path = RESULTS_DIR / f"{polygon_id}.summary.json"
     if path.exists():
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            digest = json.loads(path.read_text(encoding="utf-8"))
+            if all(key in digest for key in _DIGEST_KEYS):
+                return digest
         except (OSError, json.JSONDecodeError):
             pass
 

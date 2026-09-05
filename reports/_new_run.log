@@ -1,0 +1,33 @@
+C:\Users\Dmitry\Desktop\fenolog\src\ml\m_e02_clean.py:330: RuntimeWarning: All-NaN slice encountered
+  m = np.nanmedian(a, axis=1)
+C:\Users\Dmitry\Desktop\fenolog\src\ml\m_e02_clean.py:341: RuntimeWarning: All-NaN slice encountered
+  m = np.nanmedian(clipped[:, order], axis=1)
+C:\Users\Dmitry\Desktop\fenolog\src\ml\features.py:160: RuntimeWarning: Mean of empty slice
+  self._temp[name] = np.nanmean(T[:, mates], axis=1)
+C:\Users\Dmitry\Desktop\fenolog\src\ml\features.py:161: RuntimeWarning: Mean of empty slice
+  self._prec[name] = np.nanmean(P[:, mates], axis=1)
+C:\Users\Dmitry\Desktop\fenolog\src\ml\m_e02_clean.py:330: RuntimeWarning: All-NaN slice encountered
+  m = np.nanmedian(a, axis=1)
+C:\Users\Dmitry\Desktop\fenolog\src\ml\m_e02_clean.py:341: RuntimeWarning: All-NaN slice encountered
+  m = np.nanmedian(clipped[:, order], axis=1)
+C:\Users\Dmitry\Desktop\fenolog\src\ml\features.py:160: RuntimeWarning: Mean of empty slice
+  self._temp[name] = np.nanmean(T[:, mates], axis=1)
+C:\Users\Dmitry\Desktop\fenolog\src\ml\features.py:161: RuntimeWarning: Mean of empty slice
+  self._prec[name] = np.nanmean(P[:, mates], axis=1)
+Метод обучаемый: обучен на 2999 точках локального контроля
+Модель сохранена: models\e05_lgbm.pkl
+C:\Users\Dmitry\Desktop\fenolog\src\ml\m_e02_clean.py:330: RuntimeWarning: All-NaN slice encountered
+  m = np.nanmedian(a, axis=1)
+C:\Users\Dmitry\Desktop\fenolog\src\ml\m_e02_clean.py:341: RuntimeWarning: All-NaN slice encountered
+  m = np.nanmedian(clipped[:, order], axis=1)
+C:\Users\Dmitry\Desktop\fenolog\src\ml\features.py:160: RuntimeWarning: Mean of empty slice
+  self._temp[name] = np.nanmean(T[:, mates], axis=1)
+C:\Users\Dmitry\Desktop\fenolog\src\ml\features.py:161: RuntimeWarning: Mean of empty slice
+  self._prec[name] = np.nanmean(P[:, mates], axis=1)
+Метод: e05_lgbm — LightGBM поверх всех методов, + train
+Записано 2323 строк в submission_new.csv
+Диапазон предсказаний: 0.0935 .. 0.9009
+anon_polygon_id       date  primary_ndvi_pred
+       AOI-0005 2010-05-02           0.274722
+       AOI-0005 2010-07-28           0.316212
+       AOI-0005 2010-08-05           0.260917

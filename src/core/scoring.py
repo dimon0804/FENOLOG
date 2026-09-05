@@ -854,6 +854,12 @@ def field_score(
             "stress_days": int(r["stress_days"]),
             "worst_z": None if not np.isfinite(r["worst_z"]) else round(r["worst_z"], 2),
             "verdict": _verdict(r),
+            # Полнота сезона отдаётся наружу, а не остаётся внутренней: без неё
+            # потребитель таблицы вынужден догадываться, закрыт ли сезон, по
+            # последней дате ряда — и ошибаться на текущем сезоне. Балл считается
+            # только по полным сезонам, поэтому неполные надо помечать явно.
+            "coverage": round(float(r["coverage"]), 3),
+            "complete": bool(r["complete"]),
         }
         for r in rows
     ]

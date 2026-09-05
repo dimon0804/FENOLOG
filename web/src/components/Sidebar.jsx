@@ -21,9 +21,7 @@ import {
  *
  * Ниже — состояние источников и карточка пользователя, обе из макета. Имя в
  * карточке не выдумано: входа в сервисе нет, и вместо несуществующей учётной
- * записи там написано, в каком режиме сервис работает. Раскрытая карточка
- * показывает версию и позволяет перепроверить источники, не дожидаясь, пока
- * истечёт минутный кэш.
+ * записи там написано, в каком режиме сервис работает.
  */
 
 export const SECTIONS = [
@@ -34,9 +32,15 @@ export const SECTIONS = [
   { key: 'reports', title: 'Отчёты', Icon: IconReports },
 ]
 
-export default function Sidebar({ section, onSection, health, fieldsCount, version, onRecheck }) {
+export default function Sidebar({
+  section, onSection, health, fieldsCount, version, onRecheck, rechecking,
+}) {
   const tone = { ok: 'ok', degraded: 'warn', down: 'bad' }[health?.status] || 'warn'
   const stateText = { ok: 'Активны', degraded: 'Частично', down: 'Сбой' }[health?.status] || '…'
+
+  // Время последней проверки. Панель, которая всегда показывает «отвечает» и
+  // ничем не выдаёт, что она живая, неотличима от зелёной картинки для вида —
+  // а это ровно та нечестность, которой в продукте быть не должно.
   const checked = clock(health?.checked_at)
 
   return (
@@ -82,19 +86,37 @@ export default function Sidebar({ section, onSection, health, fieldsCount, versi
                   : 'Отвечает'
                 : 'Недоступен'}
             </div>
+            {/* Последствие отказа сервер считает давно, но интерфейс его
+                выбрасывал. «Недоступен» само по себе не отвечает на вопрос,
+                можно ли продолжать работу, — а именно он у пользователя и
+                возникает. */}
+            {source.status !== 'ok' && source.consequence && (
+              <div className="consequence">{source.consequence}</div>
+            )}
           </div>
         ))}
+
+        {/* Проверка вручную. Кэш живёт минуту, и после починки сети ждать её
+            истечения, глядя на красный индикатор, незачем. */}
+        <button
+          type="button"
+          className="source-recheck"
+          onClick={onRecheck}
+          disabled={rechecking}
+          title="Опросить источники заново, минуя кэш"
+        >
+          {rechecking ? 'проверяю…' : 'проверить сейчас'}
+        </button>
       </div>
 
-      <Account version={version} health={health} onRecheck={onRecheck} />
+      <Account version={version} health={health} />
     </nav>
   )
 }
 
 /** Карточка пользователя внизу колонки — место из макета. */
-function Account({ version, health, onRecheck }) {
+function Account({ version, health }) {
   const [open, setOpen] = useState(false)
-  const [busy, setBusy] = useState(false)
   const wrap = useRef(null)
 
   useEffect(() => {
@@ -104,15 +126,6 @@ function Account({ version, health, onRecheck }) {
     document.addEventListener('mousedown', away)
     return () => document.removeEventListener('mousedown', away)
   }, [])
-
-  async function recheck() {
-    setBusy(true)
-    try {
-      await onRecheck?.()
-    } finally {
-      setBusy(false)
-    }
-  }
 
   return (
     <div className="nav-foot-wrap" ref={wrap}>
@@ -129,9 +142,6 @@ function Account({ version, health, onRecheck }) {
             <span>Источники</span>
             <b>{health?.status === 'ok' ? 'все отвечают' : 'часть молчит'}</b>
           </div>
-          <button className="btn sm" style={{ width: '100%' }} disabled={busy} onClick={recheck}>
-            {busy ? 'Проверяю…' : 'Проверить источники заново'}
-          </button>
         </div>
       )}
 

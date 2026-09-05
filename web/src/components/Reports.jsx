@@ -76,6 +76,17 @@ export default function Reports({ summary, onGoMap }) {
                 </div>
               </div>
               <div className="row" style={{ gap: 8 }}>
+                {/* Отчёт для человека идёт первым и выделен: выгрузки рядом —
+                    это данные для аналитика, а PDF читают без подготовки. */}
+                <a
+                  className="btn primary"
+                  href={`/api/polygons/${field.id}/report.pdf`}
+                  download
+                  title="PDF с графиками и объяснением обычными словами"
+                >
+                  <IconDownload width={17} height={17} />
+                  Отчёт PDF
+                </a>
                 <button
                   className="btn"
                   disabled={busy === `${field.id}:series`}

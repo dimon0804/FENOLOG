@@ -48,9 +48,15 @@ def rmse(truth: np.ndarray, pred: np.ndarray) -> float:
     return float(np.sqrt(np.mean((truth - pred) ** 2)))
 
 
-def prepare(use_train: bool, hide_frac: float, seed: int):
-    """Готовит контрольный набор: прячет точки и стирает у них признаки."""
-    df = load_all(use_train=use_train)
+def prepare(use_train: bool, hide_frac: float, seed: int, test_path=None):
+    """Готовит контрольный набор: прячет точки и стирает у них признаки.
+
+    test_path — какой файл считать основным. По умолчанию тот, на котором
+    ставился весь протокол. Возможность подменить нужна, когда организаторы
+    выдают новый тест: у него своя плотность наблюдений (до 2016 года нет
+    Sentinel-2 вовсе), и мерить на старом файле — значит мерить не ту задачу.
+    """
+    df = load_all(use_train=use_train, **({"test_path": test_path} if test_path else {}))
     templates = H.extract_templates(df)
     points, hidden_rows = H.build_holdout(df, templates, hide_frac=hide_frac, seed=seed)
     masked = mask_rows(df, hidden_rows)

@@ -26,8 +26,10 @@ async function request(path, options = {}) {
 }
 
 export const api = {
-  // force — опросить источники заново, не дожидаясь, пока истечёт кэш проверки.
-  health: (force = false) => request(`/api/providers/health${force ? '?force=true' : ''}`),
+  // force=true заставляет сервер перепроверить источники, минуя кэш:
+  // нужен кнопке ручной проверки, иначе индикатор минуту не шевелится.
+  health: (force = false) =>
+    request(`/api/providers/health${force ? '?force=true' : ''}`),
 
   summary: () => request('/api/summary'),
 

@@ -13,6 +13,8 @@
 """
 from __future__ import annotations
 
+import hashlib
+
 import numpy as np
 
 from src.core.clean import (
@@ -126,7 +128,17 @@ class _CleanWhittaker(BaseMethod):
                 # случайно. Если перемешанные веса дают тот же выигрыш, значит
                 # дело не в сенсоре, а просто в том, что средний вес меньше
                 # единицы, то есть в неявно усиленном сглаживании.
-                np.random.default_rng(abs(hash(view.polygon_id)) % 2**32).shuffle(weights)
+                # Зерно берётся из устойчивого хеша, а не из встроенного hash():
+                # для строк тот случаен в каждом процессе (PYTHONHASHSEED), и
+                # перемешивание получалось разным от запуска к запуску. Метод
+                # контрольный, но он входит признаком в итоговую модель, поэтому
+                # из-за одной этой строки переставал воспроизводиться весь
+                # submission: расхождение до 0,0022 при RMSE 0,0596.
+                seed = int.from_bytes(
+                    hashlib.blake2s(view.polygon_id.encode("utf-8"), digest_size=4).digest(),
+                    "big",
+                )
+                np.random.default_rng(seed).shuffle(weights)
 
         # Маску отсечения считаем здесь, а не в clean.clip_physical, потому что
         # тем же самым срезом надо укоротить и массив весов.

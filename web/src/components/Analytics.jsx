@@ -12,7 +12,7 @@ import {
 
 import { api } from '../api.js'
 import { safeName, save, seriesCsv } from '../csv.js'
-import { formatDate } from '../dict.js'
+import { FIELD_STATE, formatDate } from '../dict.js'
 import { IconDownload } from './icons.jsx'
 
 // Цвета линий сравнения. Намеренно не из смысловой тройки и не из палитры
@@ -21,16 +21,15 @@ import { IconDownload } from './icons.jsx'
 const LINES = ['#2f6b2a', '#1f34d4', '#8b2fe8', '#c46a12', '#0f8f8f']
 const MAX_COMPARE = 5
 
-// Зоны состояния — те же пороги и те же слова, которыми ядро называет классы
-// периодов: глубже двух сигм — критическая аномалия, от одной до двух —
-// угнетение биомассы. В макете зоны названы «Внимание» и «Аномалия», но рядом
-// на этом же экране стоит счётчик аномальных дней, и два разных смысла слова
-// «аномалия» на одном экране — это спор с самим собой.
+// Зоны состояния — те же пороги, по которым ядро выделяет периоды: глубже двух
+// сигм аномалия, от одной до двух повод присмотреться. Названия и цвета берутся
+// из общего словаря состояний, того же, которым карта красит контуры: одно и то
+// же состояние поля обязано называться на всех экранах одинаково.
 const ZONES = [
-  { key: 'norm', label: 'Норма', color: '#4e9b36', test: (z) => z > -1 },
-  { key: 'watch', label: 'Угнетение', color: '#e08a20', test: (z) => z > -2 },
-  { key: 'anomaly', label: 'Критическая', color: '#d4342a', test: () => true },
-]
+  { key: 'ok', test: (z) => z > -1 },
+  { key: 'watch', test: (z) => z > -2 },
+  { key: 'bad', test: () => true },
+].map((zone) => ({ ...zone, ...FIELD_STATE[zone.key] }))
 
 /**
  * Раздел «Аналитика»: разбор одного поля по сезонам плюс сравнение полей.
@@ -158,7 +157,7 @@ export default function Analytics({ summary, onOpenField }) {
               spark={<Spark values={stats.sparkZ} color="#d4342a" />}
             />
             <Kpi
-              label="Аномальных дней"
+              label="Дней с отклонением"
               value={stats.anomalyDays}
               note={{
                 text: `${Math.round((stats.anomalyDays / Math.max(stats.days, 1)) * 100)}% дней периода`,
@@ -560,7 +559,7 @@ function delta(value, previous, digits, unit, what) {
 
 /** Доли дней периода по зонам состояния. */
 function zones(points) {
-  const counts = { norm: 0, watch: 0, anomaly: 0 }
+  const counts = { ok: 0, watch: 0, bad: 0 }
   let total = 0
   for (const point of points) {
     if (point.zscore == null) continue

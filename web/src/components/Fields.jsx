@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { plural } from '../dict.js'
+import { FIELD_STATE, fieldState, plural } from '../dict.js'
 import { IconDots, IconPlus, IconSearch } from './icons.jsx'
 import Thumb from './Thumb.jsx'
 
@@ -37,7 +37,7 @@ export default function Fields({ summary, selectedId, onOpen, onRename, onDelete
         if (query && !field.name.toLowerCase().includes(query.trim().toLowerCase())) return false
         if (crop === '—' && field.crop_type) return false
         if (crop && crop !== '—' && field.crop_type !== crop) return false
-        if (status && statusOf(field).key !== status) return false
+        if (status && fieldState(field.summary) !== status) return false
         return true
       }),
     [fields, query, crop, status],
@@ -81,7 +81,7 @@ export default function Fields({ summary, selectedId, onOpen, onRename, onDelete
 
         <select className="select" value={status} onChange={(event) => setStatus(event.target.value)}>
           <option value="">Все статусы</option>
-          {Object.entries(STATUS).map(([key, tone]) => (
+          {Object.entries(FIELD_STATE).map(([key, tone]) => (
             <option key={key} value={key}>{tone.label}</option>
           ))}
         </select>
@@ -107,7 +107,8 @@ export default function Fields({ summary, selectedId, onOpen, onRename, onDelete
             </thead>
             <tbody>
               {shown.map((field) => {
-                const tone = statusOf(field)
+                const state = fieldState(field.summary)
+                const tone = FIELD_STATE[state]
                 return (
                   <tr
                     key={field.id}
@@ -157,8 +158,8 @@ export default function Fields({ summary, selectedId, onOpen, onRename, onDelete
                     <td>
                       <span
                         className="status"
-                        style={{ background: tone.bg, color: tone.ink }}
-                        title={tone.hint(field)}
+                        style={{ background: tone.fill, color: tone.color }}
+                        title={stateHint(field, state)}
                       >
                         {tone.label}
                       </span>
@@ -255,50 +256,25 @@ function RowMenu({ field, onOpen, onAnalyze, onRename, onDelete }) {
 }
 
 /**
- * Статус поля одним словом.
+ * Подсказка к статусу: почему поле оказалось в этом состоянии.
  *
- * Классов ровно столько, сколько различает ядро: критическая аномалия и
- * угнетение биомассы. Плюс «нет данных» для полей, которые ещё не считали, —
- * без него разобранное спокойное поле и никогда не считанное выглядели бы
- * одинаково, а это противоположные вещи.
+ * Сам класс считает `fieldState` из общего словаря — тот же, которым карта
+ * красит контуры. Держать здесь вторую таблицу состояний значило бы получить
+ * поле, красное на карте и зелёное в списке.
  */
-const STATUS = {
-  anomaly: {
-    key: 'anomaly',
-    label: 'Аномалия',
-    bg: '#f89492',
-    ink: '#7d1f1b',
-    hint: (f) => `Критических периодов: ${f.summary.critical}`,
-  },
-  suppression: {
-    key: 'suppression',
-    label: 'Угнетение',
-    bg: '#fbdca2',
-    ink: '#7a4a06',
-    hint: (f) => `Периодов угнетения биомассы: ${f.summary.suppression}`,
-  },
-  normal: {
-    key: 'normal',
-    label: 'Норма',
-    bg: '#9ef892',
-    ink: '#1c5a15',
-    hint: () => 'Отклонений от нормы не найдено',
-  },
-  none: {
-    key: 'none',
-    label: 'Нет данных',
-    bg: '#dadada',
-    ink: '#5a5a5a',
-    hint: () => 'Поле сохранено, но ещё не разбиралось',
-  },
-}
-
-function statusOf(field) {
+function stateHint(field, state) {
   const digest = field.summary
-  if (!digest) return STATUS.none
-  if (digest.critical > 0) return STATUS.anomaly
-  if (digest.anomalies > 0) return STATUS.suppression
-  return STATUS.normal
+  if (!digest) return 'Поле сохранено, но ещё не разбиралось'
+  if (state === 'nodata') return 'Данных не хватает, чтобы судить о состоянии сегодня'
+  const current = digest.current
+  if (current?.as_of) {
+    const when = new Date(current.as_of).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' })
+    const z = current.zscore == null ? '' : `, отклонение ${current.zscore.toFixed(1)} σ`
+    return `Состояние на ${when}${z} · за всю историю периодов: ${digest.anomalies}`
+  }
+  if (state === 'bad') return `Критических периодов за всю историю: ${digest.critical}`
+  if (state === 'watch') return `Периодов угнетения за всю историю: ${digest.suppression}`
+  return 'Отклонений от нормы не найдено'
 }
 
 /** «2 ч назад» — насколько свежий разбор, без разглядывания даты. */

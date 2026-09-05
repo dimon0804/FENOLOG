@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { api, pollTask } from './api.js'
+import { REGION_PRESETS, fieldState } from './dict.js'
 import Analytics from './components/Analytics.jsx'
 import Fields from './components/Fields.jsx'
 import MapWorkspace from './components/MapWorkspace.jsx'
@@ -33,6 +34,7 @@ export default function App() {
 
   const [summary, setSummary] = useState(null)
   const [health, setHealth] = useState(null)
+  const [rechecking, setRechecking] = useState(false)
 
   const [selected, setSelected] = useState(null) // сохранённый участок
   const [draft, setDraft] = useState(null) // ещё не сохранённый контур
@@ -45,8 +47,17 @@ export default function App() {
   const [searching, setSearching] = useState(false)
   const [searchNote, setSearchNote] = useState(null)
   const [region, setRegion] = useState(null)
+  // Ключ пресета Южного федерального округа, если регион выбран выпадающим
+  // списком на карте. У региона из поиска ключа нет — и список не должен
+  // показывать чужое название вместо найденного.
+  const [regionKey, setRegionKey] = useState(null)
   const [regionOutline, setRegionOutline] = useState(null)
   const [flyTo, setFlyTo] = useState(null)
+
+  // Сохранённые контуры с геометрией — карта рисует их поверх подложки и
+  // красит по состоянию. В сводке геометрии нет (там только центр), поэтому
+  // список участков приходит отдельным маршрутом.
+  const [polygons, setPolygons] = useState([])
 
   const [parcels, setParcels] = useState([])
   const [discovering, setDiscovering] = useState(false)
@@ -54,18 +65,18 @@ export default function App() {
 
   const [years, setYears] = useState(5)
 
-  const reload = useCallback(
-    () => api.summary().then(setSummary).catch(() => {}),
-    [],
-  )
+  // Сводка и список участков грузятся вместе: в сводке есть вердикт по каждому
+  // полю, но нет геометрии, а карте нужно и то и другое. Падение одного из
+  // запросов не должно ронять второй — отсюда allSettled.
+  const reload = useCallback(async () => {
+    const [digest, list] = await Promise.allSettled([api.summary(), api.listPolygons()])
+    if (digest.status === 'fulfilled') setSummary(digest.value)
+    if (list.status === 'fulfilled') setPolygons(list.value.polygons || [])
+  }, [])
   useEffect(() => { reload() }, [reload])
 
   // Состояние источников опрашиваем раз в минуту: ровно столько живёт кэш
   // проверки на сервере, чаще спрашивать бессмысленно.
-  const loadHealth = useCallback(
-    (force = false) => api.health(force).then(setHealth).catch(() => {}),
-    [],
-  )
   useEffect(() => {
     let alive = true
     const load = () => api.health().then((h) => alive && setHealth(h)).catch(() => {})
@@ -74,7 +85,40 @@ export default function App() {
     return () => { alive = false; clearInterval(timer) }
   }, [])
 
+  async function recheckHealth() {
+    setRechecking(true)
+    try {
+      setHealth(await api.health(true))
+    } catch {
+      // Молчим намеренно: неудачная перепроверка не должна ронять экран,
+      // а прошлое состояние остаётся на месте и подписано своим временем.
+    } finally {
+      setRechecking(false)
+    }
+  }
+
   const geometry = draft?.geometry || selected?.geometry || null
+
+  // Что показать в карточке над выбранным контуром: название и культура —
+  // ровно две строки макета.
+  const selectedLabel = draft
+    ? { name: draft.name || 'Новый контур', crop: draft.crop_type }
+    : selected
+      ? { name: selected.name, crop: selected.crop_type }
+      : null
+
+  // Раскраска сохранённых полей на карте. Вердикт считается из выжимки разбора
+  // той же логикой, что и в ядре; поле без разбора — «нет данных», серое.
+  const savedFields = useMemo(() => {
+    const digests = new Map((summary?.fields || []).map((field) => [field.id, field.summary]))
+    return polygons
+      .filter((item) => item.geometry)
+      .map((item) => ({
+        id: item.id,
+        geometry: item.geometry,
+        state: fieldState(digests.get(item.id)),
+      }))
+  }, [polygons, summary])
 
   // ------------------------------------------------------------------- регион
   async function searchRegion(query) {
@@ -99,9 +143,28 @@ export default function App() {
 
   function pickPlace(place) {
     setRegion(place.name.split(',')[0])
+    setRegionKey(null)
     setRegionOutline(place.geometry)
     setFlyTo({ bbox: place.bbox, at: Date.now() })
     setPlaces([])
+    setSection('map')
+  }
+
+  /** Регион из выпадающего списка на карте: перелёт к рамке пресета. */
+  function pickRegion(key) {
+    const preset = REGION_PRESETS.find((item) => item.key === key)
+    if (!preset) return
+    const [west, south, east, north] = preset.bbox
+    setRegionKey(key)
+    setRegion(preset.title)
+    // Пунктиром показывается именно рамка поиска, а не граница субъекта:
+    // пресеты — прямоугольники, и рисовать их как настоящую границу было бы
+    // враньём на карте.
+    setRegionOutline({
+      type: 'Polygon',
+      coordinates: [[[west, south], [east, south], [east, north], [west, north], [west, south]]],
+    })
+    setFlyTo({ bbox: preset.bbox, at: Date.now() })
     setSection('map')
   }
 
@@ -251,7 +314,8 @@ export default function App() {
         health={health}
         fieldsCount={summary?.polygons || 0}
         version={VERSION}
-        onRecheck={() => loadHealth(true)}
+        rechecking={rechecking}
+        onRecheck={recheckHealth}
       />
 
       <div className="main">
@@ -279,10 +343,17 @@ export default function App() {
             <MapWorkspace
               {...shared}
               parcels={parcels}
+              saved={savedFields}
               geometry={geometry}
+              selectedLabel={selectedLabel}
               regionOutline={regionOutline}
+              regionKey={regionKey}
+              regionTitle={region}
+              onPickRegion={pickRegion}
+              onBack={() => setSection('overview')}
               flyTo={flyTo}
               onPickParcel={pickParcel}
+              onOpenSaved={(id) => openField({ id })}
               onDrawn={onDrawn}
               onDiscover={discover}
               discovering={discovering}

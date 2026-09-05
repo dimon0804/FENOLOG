@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { GlyphChart, GlyphCloud, GlyphSpike, IconArrow, IconChevron } from './icons.jsx'
-import { SEVERITY, plural } from '../dict.js'
+import { FIELD_STATE, fieldState, plural } from '../dict.js'
 
 /**
  * Экран «Обзор» — то, что видно при открытии сервиса.
@@ -227,45 +227,38 @@ function Activity({ summary, onOpenField, onGoMap }) {
 
 function ActivityRow({ field, onOpen }) {
   const digest = field.summary
-  const worst = digest?.worst_zscore
-  const tone =
-    !digest ? null : worst != null && worst <= -2 ? SEVERITY.critical : SEVERITY.suppression
-
-  const state = rowState(digest)
+  const state = fieldState(digest)
+  const tone = FIELD_STATE[state]
 
   return (
     <button className="activity-row" onClick={() => onOpen(field)}>
-      <span className={`dot ${state.dot}`} />
+      <span className="dot" style={{ background: tone.color }} />
       <span className="who">
         <span className="name">{field.name}</span>
-        <span className="what">{state.text}</span>
+        <span className="what">{rowText(digest, state)}</span>
       </span>
-      {digest && worst != null && (
-        <span className="tag" style={{ background: tone.soft, color: tone.color }}>
-          {worst.toFixed(1)} σ
-        </span>
-      )}
+      <span className="tag" style={{ background: tone.fill, color: tone.color }}>
+        {tone.label}
+      </span>
       <span className="when">{ago(field.last_analyzed_at)}</span>
     </button>
   )
 }
 
-/** Точка и подпись строки: что именно случилось с полем при последнем разборе. */
-function rowState(digest) {
-  if (!digest) return { dot: 'idle', text: 'Ещё не разбиралось' }
-  if (digest.critical > 0) {
-    return {
-      dot: 'bad',
-      text: `Критических аномалий: ${digest.critical}`,
-    }
-  }
+/**
+ * Подпись строки: что случилось с полем.
+ *
+ * Класс состояния берётся из общего словаря — того же, которым карта красит
+ * контуры, — и отвечает на вопрос «что с полем сегодня». Подпись поясняет его
+ * числом: сколько периодов нашлось за всю историю наблюдений.
+ */
+function rowText(digest, state) {
+  if (!digest) return 'Ещё не разбиралось'
+  if (state === 'nodata') return 'Данных не хватает для оценки'
   if (digest.anomalies > 0) {
-    return {
-      dot: 'warn',
-      text: `${plural(digest.anomalies, 'период', 'периода', 'периодов')} угнетения`,
-    }
+    return `${plural(digest.anomalies, 'период', 'периода', 'периодов')} за всю историю`
   }
-  return { dot: 'ok', text: 'Данные обновлены, отклонений нет' }
+  return 'Данные обновлены, отклонений нет'
 }
 
 /** «2 ч назад» — насколько свежий разбор, без разглядывания даты. */

@@ -61,6 +61,19 @@ export default function FieldPanel({
               </button>
             </>
           )}
+          {selected && !draft && result && (
+            // Отчёт для тех, кто не читает графики: обычная ссылка, а не fetch,
+            // потому что файл должен уйти в загрузки браузера, а не в память
+            // вкладки. Имя файла сервер задаёт сам заголовком.
+            <a
+              className="btn"
+              href={`/api/polygons/${selected.id}/report.pdf`}
+              download
+              title="PDF с графиками и объяснением обычными словами"
+            >
+              Отчёт PDF
+            </a>
+          )}
           {selected && !draft && (
             <button className="btn primary" onClick={() => onAnalyzeSaved(selected)} disabled={running}>
               {result ? 'Пересчитать' : 'Проанализировать'}
