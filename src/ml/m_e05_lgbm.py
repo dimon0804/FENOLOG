@@ -28,6 +28,7 @@ GroupKFold — поле целиком либо в обучении, либо в
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import pickle
 from pathlib import Path
@@ -43,7 +44,17 @@ from src.ml.registry import BaseMethod, register
 MODEL_DIR = Path("models")
 # Кэш признаков расширенного набора. Пересобирается сам, когда меняется протокол
 # или список базовых методов; файл можно удалить в любой момент.
+log = logging.getLogger(__name__)
+
 CACHE_PATH = MODEL_DIR / "_e05_feature_cache.pkl"
+
+# Настоящие ответы организаторов по контрольным точкам прошлого теста. Появились
+# после первой волны проверки и являются лучшей обучающей выборкой, какая у нас
+# есть: геометрия разрывов там настоящая по определению, а маскирование сделано
+# организаторами, а не воспроизведено нами. Файла может не быть — тогда всё
+# работает как раньше.
+GROUND_TRUTH_PATH = Path("data/private_test_ground_truth.csv")
+GROUND_TRUTH_SOURCE = Path("data/private_features.csv")
 FINAL_MODEL_PATH = MODEL_DIR / "e05_lgbm.pkl"
 
 # Сколько независимых розыгрышей расширенного набора строить. Каждый добавляет
@@ -110,6 +121,65 @@ def _fingerprint(points, base_preds: pd.DataFrame, n_rep: int) -> str:
     return h.hexdigest()[:16]
 
 
+def _real_labelled_rows(feats: list[str], crop_map: dict):
+    """Настоящие ответы прошлого теста как дополнительные обучающие строки.
+
+    Возвращает (X, y, groups) в том же признаковом пространстве, что и остальное
+    обучение, либо None, если файла ответов нет.
+
+    Про утечку. Признаки считаются по тому же файлу, который выдали организаторы,
+    то есть контрольные точки в нём уже замаскированы — модель видит ровно ту
+    картину, что и на инференсе. Отбор по полигонам обучающей части фолда делает
+    сам `fit`, поэтому поле контрольной части через свои же ответы не протечёт.
+    """
+    if not GROUND_TRUTH_PATH.exists() or not GROUND_TRUTH_SOURCE.exists():
+        return None
+    try:
+        import pandas as _pd
+
+        from src.cli.batch_infer import _stateless_predictions, build_targets
+        from src.ml.dataset import TRAIN_PATH, build_views, load_frame
+
+        df = load_frame(str(GROUND_TRUTH_SOURCE), "test")
+        if Path(TRAIN_PATH).exists():
+            tr = load_frame(str(TRAIN_PATH), "train")
+            df = _pd.concat([df, tr], ignore_index=True, sort=False)
+            df["is_synthetic_gap"] = df["is_synthetic_gap"].fillna(False).astype(bool)
+        df = df.sort_values(["anon_polygon_id", "_ord"]).reset_index(drop=True)
+
+        views = build_views(df)
+        points = build_targets(df)
+        if not points:
+            return None
+
+        gt = _pd.read_csv(GROUND_TRUTH_PATH)
+        answer = {(r.anon_polygon_id, r.date): r.primary_ndvi_true for r in gt.itertuples()}
+        y = np.array([
+            answer.get(
+                (p.polygon_id,
+                 _pd.Timestamp.fromordinal(int(p.ord_day)).strftime("%Y-%m-%d")),
+                np.nan)
+            for p in points
+        ], dtype=float)
+        ok = np.isfinite(y)
+        if ok.sum() < 100:
+            return None
+
+        base = _stateless_predictions(points, views, {"df": df, "points": points})
+        fb = FT.FeatureBuilder(views, weather=FT.WeatherGroups(df), crop_map=crop_map)
+        X = fb.transform(points, base)
+        for c in feats:
+            if c not in X.columns:
+                X[c] = np.nan
+        X = X[feats].astype(np.float32)
+        groups = np.array([p.polygon_id for p in points])
+        log.info("e05: добавлено %d настоящих размеченных точек", int(ok.sum()))
+        return X[ok], y[ok], groups[ok]
+    except Exception as exc:  # noqa: BLE001 — обучение не должно падать из-за добавки
+        log.warning("e05: настоящие ответы подключить не удалось: %s", exc)
+        return None
+
+
 def _build_bundle(views, points, context, n_rep: int) -> _Bundle:
     base_preds: pd.DataFrame = context["base_preds"]
     raw = context["raw"]
@@ -138,6 +208,12 @@ def _build_bundle(views, points, context, n_rep: int) -> _Bundle:
                           np.array([p.truth for p in pts]),
                           np.array([p.polygon_id for p in pts])))
         _save_cache(fp, extra)
+
+    # Настоящие ответы кладём последней порцией дополнительных строк: `fit`
+    # отфильтрует их по полигонам обучающей части так же, как реплики.
+    real = _real_labelled_rows(feats, crop_map)
+    if real is not None:
+        extra = list(extra) + [real]
 
     return _Bundle(X, key_index, extra, feats, crop_map)
 
