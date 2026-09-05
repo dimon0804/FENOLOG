@@ -37,6 +37,13 @@ FALLBACK_NDVI = 0.31
 # способ случайно сдать не тот результат, которым нельзя разбрасываться.
 DEFAULT_METHOD = "e05_lgbm"
 
+# Имя колонки со значением. Первый тур платформы ждал primary_ndvi_pred, второй —
+# primary_ndvi_true. Разница ровно в имени, содержимое одинаковое. Держим это
+# параметром: в первый раз колонку переименовали руками, и поданный файл
+# перестал воспроизводиться хоть какой-нибудь командой репозитория.
+VALUE_COLUMNS = {"pred": "primary_ndvi_pred", "true": "primary_ndvi_true"}
+DEFAULT_VALUE_COLUMN = "primary_ndvi_pred"
+
 
 def build_targets(df: pd.DataFrame) -> list[HoldoutPoint]:
     """Контрольные точки в том же виде, в каком их видит протокол валидации.
@@ -201,7 +208,8 @@ def extra_history(df: pd.DataFrame, path: str = "data/private_features.csv",
 
 def build_submission(df: pd.DataFrame, method_key: str = DEFAULT_METHOD,
                      retrain: bool = False, save_model: bool = False,
-                     fit_path: str | None = None) -> pd.DataFrame:
+                     fit_path: str | None = None,
+                     value_column: str = DEFAULT_VALUE_COLUMN) -> pd.DataFrame:
     """Восстанавливает все контрольные точки выбранным методом из реестра."""
     discover()
     if method_key not in REGISTRY:
@@ -212,7 +220,7 @@ def build_submission(df: pd.DataFrame, method_key: str = DEFAULT_METHOD,
     views = build_views(df)
     points = build_targets(df)
     if not points:
-        return pd.DataFrame(columns=["anon_polygon_id", "date", "primary_ndvi_pred"])
+        return pd.DataFrame(columns=["anon_polygon_id", "date", value_column])
 
     method = REGISTRY[method_key].factory()
     context: dict = {"df": df, "points": points}
@@ -257,19 +265,20 @@ def build_submission(df: pd.DataFrame, method_key: str = DEFAULT_METHOD,
         {
             "anon_polygon_id": [p.polygon_id for p in points],
             "date": [pd.Timestamp.fromordinal(p.ord_day).strftime("%Y-%m-%d") for p in points],
-            "primary_ndvi_pred": preds,
+            value_column: preds,
         }
     )
 
 
-def validate(sub: pd.DataFrame, expected: int) -> None:
+def validate(sub: pd.DataFrame, expected: int,
+             value_column: str = DEFAULT_VALUE_COLUMN) -> None:
     """Проверяет файл до отправки — платформа не примёт его с ошибками формата."""
-    assert list(sub.columns) == ["anon_polygon_id", "date", "primary_ndvi_pred"], "неверные колонки"
+    assert list(sub.columns) == ["anon_polygon_id", "date", value_column], "неверные колонки"
     assert len(sub) == expected, f"строк {len(sub)}, ожидалось {expected}"
-    assert sub["primary_ndvi_pred"].notna().all(), "есть пропуски в предсказаниях"
-    assert np.isfinite(sub["primary_ndvi_pred"]).all(), "есть бесконечные значения"
+    assert sub[value_column].notna().all(), "есть пропуски в предсказаниях"
+    assert np.isfinite(sub[value_column]).all(), "есть бесконечные значения"
     assert not sub.duplicated(["anon_polygon_id", "date"]).any(), "есть дубликаты пары полигон+дата"
-    assert sub["primary_ndvi_pred"].between(0.0, 1.0).all(), "значения вне диапазона NDVI"
+    assert sub[value_column].between(0.0, 1.0).all(), "значения вне диапазона NDVI"
 
 
 def main() -> None:
@@ -286,6 +295,9 @@ def main() -> None:
                         help="переобучить модель с нуля, не беря готовую из models/")
     parser.add_argument("--save-model", action="store_true",
                         help="сохранить переобученную модель в models/ (только с --retrain)")
+    parser.add_argument("--value-column", choices=sorted(VALUE_COLUMNS), default="pred",
+                        help="имя колонки значения: pred -> primary_ndvi_pred (первый тур), "
+                             "true -> primary_ndvi_true (второй тур)")
     parser.add_argument("--extra-history", action="store_true",
                         help="дополнить ряды наблюдениями тех же полей из ранее "
                              "выданного файла и ответов к нему")
@@ -315,16 +327,19 @@ def main() -> None:
     if args.extra_history:
         df = extra_history(df)
 
+    column = VALUE_COLUMNS[args.value_column]
     sub = build_submission(df, method_key=args.method, retrain=args.retrain,
                            save_model=args.save_model,
-                           fit_path=args.input if args.fit_on_input else None)
-    validate(sub, expected)
+                           fit_path=args.input if args.fit_on_input else None,
+                           value_column=column)
+    validate(sub, expected, value_column=column)
 
     out = Path(args.output)
     sub.to_csv(out, index=False, encoding="utf-8")
     print(f"Метод: {args.method} — {REGISTRY[args.method].title}")
     print(f"Записано {len(sub)} строк в {out}")
-    print(f"Диапазон предсказаний: {sub.primary_ndvi_pred.min():.4f} .. {sub.primary_ndvi_pred.max():.4f}")
+    print(f"Колонка значения: {column}")
+    print(f"Диапазон предсказаний: {sub[column].min():.4f} .. {sub[column].max():.4f}")
     print(sub.head(3).to_string(index=False))
 
 
