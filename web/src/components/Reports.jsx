@@ -1,7 +1,8 @@
 import { useState } from 'react'
 
 import { api } from '../api.js'
-import { CAUSE, SEVERITY, formatDate, plural } from '../dict.js'
+import { anomaliesCsv, safeName, save, seriesCsv } from '../csv.js'
+import { SEVERITY, formatDate, plural } from '../dict.js'
 import { IconDownload } from './icons.jsx'
 
 /**
@@ -41,7 +42,7 @@ export default function Reports({ summary, onGoMap }) {
     try {
       const payload = await api.savedResult(field.id)
       const stamp = new Date().toISOString().slice(0, 10)
-      const safe = field.name.replace(/[^\wа-яА-ЯёЁ -]+/g, '').trim().replace(/\s+/g, '_')
+      const safe = safeName(field.name)
       if (kind === 'json') {
         save(`${safe}_${stamp}.json`, JSON.stringify(payload, null, 2), 'application/json')
       } else if (kind === 'series') {
@@ -128,73 +129,4 @@ export default function Reports({ summary, onGoMap }) {
       })}
     </>
   )
-}
-
-// Точка с запятой и BOM — чтобы Excel с русской локалью открыл файл сразу, а не
-// свалил всё в один столбец и не показал кракозябры вместо кириллицы.
-const SEP = ';'
-
-function csv(rows) {
-  return (
-    '﻿' +
-    rows
-      .map((row) =>
-        row
-          .map((cell) => {
-            const text = cell == null ? '' : String(cell)
-            return /[";\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
-          })
-          .join(SEP),
-      )
-      .join('\r\n')
-  )
-}
-
-function seriesCsv(series) {
-  return csv([
-    ['дата', 'наблюдение', 'восстановлено', 'норма', 'станд_откл', 'z_оценка', 'восстановлено_да_нет', 'сенсор'],
-    ...series.map((p) => [
-      p.date,
-      num(p.observed),
-      num(p.restored),
-      num(p.climatology_mean),
-      num(p.climatology_std),
-      num(p.zscore),
-      p.is_restored ? 'восстановлено' : 'наблюдение',
-      p.source || '',
-    ]),
-  ])
-}
-
-function anomaliesCsv(anomalies) {
-  return csv([
-    ['начало', 'конец', 'дней', 'класс', 'причина', 'уверенность', 'z_минимум', 'z_среднее', 'объяснение'],
-    ...anomalies.map((a) => [
-      a.start,
-      a.end,
-      a.duration_days,
-      SEVERITY[a.severity]?.label || a.severity,
-      CAUSE[a.cause] || a.cause,
-      num(a.cause_confidence),
-      num(a.min_zscore),
-      num(a.mean_zscore),
-      a.explanation,
-    ]),
-  ])
-}
-
-// Десятичная запятая: с точкой Excel в русской локали считает число текстом.
-function num(value) {
-  return value == null ? '' : String(value).replace('.', ',')
-}
-
-function save(filename, content, type) {
-  const url = URL.createObjectURL(new Blob([content], { type: `${type};charset=utf-8` }))
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  URL.revokeObjectURL(url)
 }
