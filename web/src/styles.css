@@ -1,0 +1,706 @@
+/* Оформление по макету Арины.
+ *
+ * Устройство экрана: тёмная навигационная колонка слева на всю высоту, справа
+ * светлое рабочее поле, внутри которого лежит одна большая скруглённая панель.
+ * Всё содержимое — белые карточки со скруглением и мягкой тенью.
+ *
+ * Три акцентных цвета закреплены за смыслом и дальше нигде не переиспользуются:
+ * зелёный — участки и всё «в норме», фиолетовый — аномалии, синий — данные и
+ * их свежесть. Классы аномалий (красный и оранжевый) живут отдельно от этой
+ * тройки, чтобы на графике они ни с чем не спорили.
+ */
+
+@import '@fontsource-variable/manrope';
+
+:root {
+  /* тёмная колонка */
+  --nav: #0e0e0e;
+  --nav-card: #1c1c1c;
+  --nav-line: #2a2a2a;
+  --nav-text: #ffffff;
+  --nav-muted: #8d8d8d;
+
+  /* рабочее поле */
+  --page: #e8e8e8;
+  --canvas: #f7f7f7;
+  --card: #ffffff;
+  --line: #e6e6e6;
+  --ink: #101010;
+  --ink-soft: #6f6f6f;
+
+  /* акценты по смыслу */
+  --green: #4e9b36;
+  --green-deep: #2f6b2a;
+  --green-soft: #eaf3e6;
+  --purple: #8b2fe8;
+  --purple-soft: #f2e9fd;
+  --blue: #1f34d4;
+  --blue-soft: #e7e9fc;
+
+  /* классы состояния растительности */
+  --critical: #d4342a;
+  --critical-soft: #fbe9e7;
+  --suppression: #e08a20;
+  --suppression-soft: #fdf2e2;
+
+  --radius: 18px;
+  --radius-sm: 10px;
+  --shadow: 0 1px 2px rgba(16, 16, 16, 0.04), 0 6px 22px rgba(16, 16, 16, 0.06);
+  --nav-width: 292px;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { margin: 0; }
+
+/* Высота окна нигде не фиксируется жёстко.
+ *
+ * Раньше каркас был прибит к 100% высоты, и в невыгруженном на весь экран окне
+ * нижняя часть — блок источников и подпись сервиса — просто обрезалась, а
+ * прокрутить туда было нельзя: страница физически не была длиннее экрана.
+ * Теперь страница растёт по содержимому и прокручивается как обычная, а
+ * навигационная колонка остаётся на месте липкой. */
+body {
+  background: var(--page);
+  color: var(--ink);
+  font-family: 'Manrope Variable', 'Manrope', 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
+}
+
+button { font: inherit; cursor: pointer; border: 0; background: none; color: inherit; }
+input { font: inherit; }
+
+/* ==================================================================== каркас */
+
+.shell {
+  display: grid;
+  grid-template-columns: var(--nav-width) 1fr;
+  min-height: 100dvh;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0 18px 18px;
+}
+
+/* Большая скруглённая панель, на которой лежит всё содержимое раздела. */
+.canvas {
+  background: var(--canvas);
+  border-radius: 22px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+/* Разделы со свободной вёрсткой прокручиваются вместе со страницей, а не
+   внутри себя: две вложенные полосы прокрутки — верный способ не найти нужное. */
+.canvas.scroll { padding: 26px 28px 28px; }
+
+
+/* ============================================================ тёмная колонка */
+
+.nav {
+  background: var(--nav);
+  color: var(--nav-text);
+  display: flex;
+  flex-direction: column;
+  padding: 22px 18px 18px;
+  gap: 18px;
+  /* Липкая и во всю высоту окна: при прокрутке страницы навигация остаётся на
+     месте, а если сама не помещается — прокручивается внутри себя. */
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100dvh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.nav-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0 14px;
+}
+.nav-logo .wordmark {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+.nav-logo .wordmark span { color: var(--green); }
+
+.nav-items { display: flex; flex-direction: column; gap: 6px; }
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 13px 16px;
+  border-radius: 12px;
+  color: var(--nav-text);
+  font-size: 16px;
+  font-weight: 500;
+  text-align: left;
+  transition: background 0.15s;
+}
+.nav-item:hover { background: #1a1a1a; }
+.nav-item.active {
+  background: linear-gradient(90deg, var(--green-deep) 0%, #6aa84f 100%);
+  font-weight: 600;
+}
+.nav-item svg { flex: none; }
+.nav-item .count {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--nav-muted);
+}
+.nav-item.active .count { color: rgba(255, 255, 255, 0.85); }
+
+.nav-spacer { flex: 1 1 auto; min-height: 18px; }
+
+/* Логотип, источники и подпись сжиматься не имеют права: во flex-колонке
+   они по умолчанию ужимаются до нечитаемого, вместо того чтобы включить
+   прокрутку. Именно так пропадала нижняя карточка в невысоком окне. */
+.nav-logo, .nav-card, .nav-foot, .nav-items { flex: none; }
+
+.nav-card {
+  background: var(--nav-card);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.nav-card .head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.nav-card .head b { font-size: 13.5px; font-weight: 700; }
+.nav-card .state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--nav-muted);
+}
+
+.source-row { padding: 6px 0; border-top: 1px solid var(--nav-line); }
+.source-row:first-of-type { border-top: 0; }
+.source-row .name { font-size: 13px; color: var(--nav-text); }
+.source-row .when { font-size: 10.5px; color: var(--nav-muted); }
+.source-row.down .name { color: #f0a49c; }
+
+.nav-foot {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  background: var(--nav-card);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.nav-foot .mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--green-deep), #6aa84f);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.nav-foot .who { font-size: 13.5px; font-weight: 600; }
+.nav-foot .role { font-size: 11px; color: var(--nav-muted); }
+
+/* ===================================================================== шапка */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 20px 10px 18px;
+  /* Липкая: в длинных разделах управление регионом и глубиной истории должно
+     оставаться под рукой, а не уезжать вверх. */
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--page);
+}
+.topbar h1 { margin: 0; font-size: 27px; font-weight: 800; letter-spacing: -0.02em; }
+.topbar .sub { font-size: 14px; color: var(--ink-soft); margin-top: 2px; }
+
+/* Заголовок сжимается и переносит подзаголовок на вторую строку, управление —
+   нет: лучше две строки текста, чем разорванный ряд кнопок. */
+.topbar-title { flex: 1 1 280px; min-width: 0; }
+.topbar-actions { display: flex; gap: 12px; flex: 0 0 auto; margin-left: auto; }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  height: 44px;
+  padding: 0 16px;
+  background: var(--card);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.pill:hover { background: #fbfbfb; }
+.pill.icon-only { padding: 0; width: 44px; justify-content: center; }
+.pill .chev { color: var(--ink-soft); }
+.pill.alert { color: var(--critical); }
+
+.pill-wrap { position: relative; }
+
+.popover {
+  position: absolute;
+  right: 0;
+  top: 52px;
+  z-index: 40;
+  width: 340px;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 34px rgba(16, 16, 16, 0.16);
+  padding: 16px 18px;
+}
+.popover.left { right: auto; left: 0; }
+.popover h4 { margin: 0 0 10px; font-size: 13px; font-weight: 700; }
+
+.menu-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+}
+.menu-row:hover { background: #f4f4f4; }
+.menu-row.active { background: var(--green-soft); font-weight: 600; }
+
+/* ================================================================= карточки */
+
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px 22px;
+}
+.card + .card { margin-top: 18px; }
+.card h3 { margin: 0 0 14px; font-size: 16px; font-weight: 700; }
+
+.section-title { margin: 0 0 14px; font-size: 20px; font-weight: 800; letter-spacing: -0.01em; }
+
+.muted { color: var(--ink-soft); }
+.small { font-size: 12.5px; }
+.row { display: flex; align-items: center; gap: 10px; }
+.wrap { flex-wrap: wrap; }
+.stack { display: flex; flex-direction: column; gap: 10px; }
+
+/* карточка показателя с полосками у правого края — как в макете */
+.stat {
+  position: relative;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  /* Справа отступ под декоративные полоски: без него длинная подпись вроде
+     «6 817,5 га под наблюдением» наезжает прямо на них. */
+  padding: 26px 62px 22px 26px;
+  overflow: hidden;
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+}
+.stat .glyph { margin-bottom: 22px; }
+.stat .label { font-size: 17px; color: var(--ink-soft); }
+.stat .value {
+  /* Размер тянется за шириной окна, а не переключается ступеньками: «Сегодня»
+     в 68 пунктов не влезает в карточку узкого окна и вылезает за край. */
+  font-size: clamp(38px, 4.2vw, 68px);
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  margin: auto 0 0;
+}
+.stat .value.word { font-size: clamp(30px, 3.3vw, 54px); }
+.stat .delta { margin-top: 14px; font-size: 15px; font-weight: 600; }
+.stat .stripes {
+  position: absolute;
+  top: 0;
+  right: 22px;
+  bottom: 0;
+  display: flex;
+  gap: 6px;
+}
+.stat .stripes i { width: 2px; background: currentColor; opacity: 0.85; }
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+/* ============================================================ быстрый старт */
+
+.quickstart {
+  position: relative;
+  margin-top: 20px;
+  border-radius: var(--radius);
+  background: linear-gradient(105deg, #f0f4ee 0%, #f7f7f7 55%, #f4f2f7 100%);
+  padding: 36px 38px;
+  overflow: hidden;
+  min-height: 250px;
+}
+.quickstart h2 {
+  margin: 0 0 10px;
+  font-size: 27px;
+  font-weight: 800;
+  color: var(--green-deep);
+  letter-spacing: -0.02em;
+}
+.quickstart p { margin: 0 0 20px; color: var(--ink-soft); font-size: 15px; max-width: 380px; }
+.quickstart .art {
+  position: absolute;
+  right: 24px;
+  bottom: 0;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+/* =================================================================== кнопки */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 42px;
+  padding: 0 18px;
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.btn:hover:not(:disabled) { background: #fbfbfb; }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.btn.primary { background: var(--green); color: #fff; box-shadow: none; }
+.btn.primary:hover:not(:disabled) { background: #43862f; }
+.btn.ghost { box-shadow: none; background: transparent; height: 32px; padding: 0 10px; font-weight: 500; }
+.btn.ghost:hover:not(:disabled) { background: #efefef; }
+.btn.danger { color: var(--critical); }
+.btn.sm { height: 34px; padding: 0 13px; font-size: 13px; }
+
+.field {
+  height: 42px;
+  width: 100%;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  color: var(--ink);
+}
+.field:focus { outline: 2px solid var(--green-soft); border-color: var(--green); }
+
+/* ==================================================================== карта */
+
+/* flex: 1 обязателен: без него экран карты сжимается по содержимому, и под
+   ним остаётся пустая половина панели. */
+/* Экран карты помещается в окно целиком: карта сверху, разбор снизу. Ниже
+   нижней границы он не сжимается — вместо этого прокручивается страница, и в
+   низком окне ничего не обрезается. */
+.map-screen {
+  display: grid;
+  grid-template-rows: minmax(240px, 52%) 1fr;
+  height: clamp(560px, calc(100dvh - 118px), 1200px);
+  min-height: 0;
+}
+.map-wrap { position: relative; min-height: 0; }
+.map { position: absolute; inset: 0; }
+
+.map-tools {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 5;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  max-width: calc(100% - 32px);
+}
+
+.map-hint {
+  position: absolute;
+  bottom: 14px;
+  left: 16px;
+  z-index: 5;
+  max-width: min(680px, calc(100% - 32px));
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  padding: 10px 14px;
+  font-size: 13.5px;
+}
+.map-hint.warn { background: #fdf6e6; }
+
+.map-bottom { display: grid; grid-template-columns: 1fr 360px; min-height: 0; border-top: 1px solid var(--line); }
+.map-charts { overflow-y: auto; padding: 18px 20px; min-width: 0; }
+.map-feed { border-left: 1px solid var(--line); overflow-y: auto; background: var(--card); }
+
+/* ============================================================ лента периодов */
+
+.anomaly {
+  border-bottom: 1px solid var(--line);
+  border-left: 3px solid transparent;
+  padding: 14px 18px;
+  cursor: pointer;
+}
+.anomaly:hover { background: #fafafa; }
+.anomaly.active { background: var(--green-soft); border-left-color: var(--green); }
+.anomaly .head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.anomaly .dates { font-weight: 700; font-size: 13.5px; }
+.anomaly .cause { font-size: 12.5px; color: var(--ink-soft); margin-top: 3px; }
+.anomaly .explanation { margin-top: 8px; font-size: 13px; }
+.anomaly .numbers { margin-top: 8px; display: flex; gap: 14px; font-size: 12px; color: var(--ink-soft); }
+
+.tag {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* ================================================================ индикаторы */
+
+.dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; }
+.dot.ok { background: #57c05a; }
+.dot.warn { background: var(--suppression); }
+.dot.bad { background: var(--critical); }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12.5px;
+  background: var(--card);
+}
+.chip.warn { border-color: #e8cd97; background: #fdf6e6; }
+.chip.bad { border-color: #eab3ad; background: var(--critical-soft); }
+
+.progress { height: 6px; border-radius: 999px; background: #e6e6e6; overflow: hidden; }
+.progress > div { height: 100%; background: var(--green); transition: width 0.35s ease; }
+
+.banner {
+  border-radius: var(--radius-sm);
+  padding: 11px 14px;
+  font-size: 13px;
+  background: var(--critical-soft);
+  color: #8a2118;
+}
+.banner.warn { background: #fdf6e6; color: #7a5410; }
+
+.empty { padding: 34px 20px; text-align: center; color: var(--ink-soft); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12.5px; color: var(--ink-soft); margin-bottom: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.legend i { width: 18px; border-top: 2px solid; display: inline-block; }
+.legend i.dotmark { width: 8px; height: 8px; border-radius: 50%; border: 0; }
+.legend i.band { width: 18px; height: 10px; border: 0; border-radius: 2px; }
+
+/* ================================================================== таблица */
+
+/* Обёртка с боковой прокруткой: в узком окне таблица участков иначе просто
+   обрезается по краю карточки. */
+.table-wrap { overflow-x: auto; }
+.table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: 14px; }
+.table th {
+  text-align: left;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+  font-weight: 700;
+  padding: 0 14px 10px;
+}
+.table td { padding: 13px 14px; border-top: 1px solid var(--line); vertical-align: middle; }
+.table tr.pick { cursor: pointer; }
+.table tr.pick:hover td { background: #fafafa; }
+.table tr.sel td { background: var(--green-soft); }
+.table td.num { font-variant-numeric: tabular-nums; }
+
+/* ================================================================== адаптив */
+
+/* Ширины подобраны по реальным окнам, а не по круглым числам: 1440 — окно
+ * ноутбука не на весь экран, 1200 — половина экрана рядом с другим окном,
+ * 1000 и 860 — узкое окно на компьютере, 780 — телефон и планшет.
+ *
+ * Колонка разделов держится до последнего и уезжает наверх только на 860.
+ * Окно шириной 900 — это по-прежнему компьютер, и «мобильная» раскладка в нём
+ * выглядит поломкой, а не адаптацией. */
+
+@media (max-width: 1440px) {
+  :root { --nav-width: 252px; }
+  .stat { min-height: 250px; }
+  .stat .glyph { margin-bottom: 16px; }
+  .map-bottom { grid-template-columns: 1fr 320px; }
+}
+
+@media (max-width: 1200px) {
+  :root { --nav-width: 232px; }
+  .topbar h1 { font-size: 23px; }
+  .quickstart .art { opacity: 0.5; right: -40px; }
+
+  /* Карточки показателей разворачиваются в строки: значок слева, подпись и
+     число посередине, изменение справа.
+     Двухколоночная ступень была здесь раньше и оказалась худшим из вариантов —
+     три карточки не делятся на два, третья уезжала во всю ширину вторым рядом,
+     и блок становился вдвое выше именно там, где высоты и так не хватает.
+     Три строки по девяносто пикселей занимают меньше места, чем один ряд
+     вертикальных карточек, и читаются не хуже. */
+  .stat-grid { grid-template-columns: 1fr; gap: 12px; }
+  .stat {
+    min-height: 0;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: 'glyph label delta' 'glyph value delta';
+    align-items: center;
+    gap: 2px 18px;
+    padding: 16px 46px 16px 20px;
+  }
+  .stat .glyph { grid-area: glyph; margin: 0; }
+  .stat .glyph svg { width: 44px; height: 44px; }
+  .stat .label { grid-area: label; font-size: 14.5px; align-self: end; }
+  .stat .value { grid-area: value; font-size: 34px; margin: 0; align-self: start; }
+  .stat .value.word { font-size: 27px; }
+  .stat .delta { grid-area: delta; margin: 0; font-size: 13px; text-align: right; }
+  .stat .stripes { right: 16px; gap: 4px; }
+}
+
+@media (max-width: 1000px) {
+  :root { --nav-width: 206px; }
+  .nav { padding: 16px 12px; gap: 14px; }
+  .nav-item { padding: 10px 12px; font-size: 14.5px; gap: 11px; }
+  .nav-item svg { width: 19px; height: 19px; }
+  .nav-logo svg { width: 40px; height: 40px; }
+  .main { padding: 0 12px 12px; }
+  .canvas.scroll { padding: 20px 18px 22px; }
+  .map-bottom { grid-template-columns: 1fr; }
+  .map-feed { border-left: 0; border-top: 1px solid var(--line); }
+  .popover { width: min(340px, calc(100vw - 32px)); }
+}
+
+@media (max-width: 860px) {
+  /* Здесь колонка перестаёт быть колонкой: уезжает наверх обычной полосой,
+     разделы становятся горизонтальным рядом с прокруткой. Держать её сбоку на
+     такой ширине значит съесть треть экрана под меню. */
+  .shell { grid-template-columns: 1fr; }
+  .nav {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    overflow-x: auto;
+  }
+  .nav-logo { flex-direction: row; gap: 10px; padding: 0; }
+  .nav-logo svg { width: 32px; height: 32px; }
+  .nav-items { flex-direction: row; gap: 4px; }
+  .nav-item { padding: 8px 12px; white-space: nowrap; }
+  .nav-item svg { display: none; }
+  /* Карточка источников уходит — её содержимое доступно по колокольчику в
+     шапке. Подпись сервиса остаётся: она отвечает на вопрос «что это вообще
+     открыто», и прятать её незачем. */
+  .nav-card { display: none; }
+  .nav-spacer { display: block; }
+  .nav-foot { padding: 7px 10px; }
+  .nav-foot .role { display: none; }
+
+  .map-screen { grid-template-rows: minmax(300px, 46%) 1fr; height: auto; }
+  .map-charts, .map-feed { overflow: visible; }
+  .map-wrap { height: 46vh; min-height: 300px; }
+}
+
+@media (max-width: 780px) {
+  .stat { padding: 14px 38px 14px 16px; }
+  .stat .glyph svg { width: 38px; height: 38px; }
+  .stat .value { font-size: 30px; }
+  .stat .value.word { font-size: 24px; }
+  .stat .delta { font-size: 12px; }
+
+  .topbar h1 { font-size: 20px; }
+  .topbar .sub { display: none; }
+  .pill { height: 40px; padding: 0 12px; font-size: 13px; }
+  .quickstart { padding: 22px 20px; }
+  .quickstart h2 { font-size: 22px; }
+  .quickstart .art { display: none; }
+  .map-tools { top: 10px; left: 10px; gap: 6px; }
+  .btn { height: 38px; padding: 0 13px; font-size: 13px; }
+}
+
+@media (max-height: 820px) {
+  .topbar { padding: 14px 10px 12px; }
+  .canvas.scroll { padding: 18px 20px 20px; }
+}
+
+@media (min-width: 1201px) and (max-height: 820px) {
+  .stat { min-height: 196px; padding-top: 20px; padding-bottom: 18px; }
+  .stat .glyph { margin-bottom: 10px; }
+  .stat .glyph svg { width: 46px; height: 46px; }
+  .stat .label { font-size: 15px; }
+  .stat .delta { margin-top: 10px; font-size: 14px; }
+  .stat-grid { gap: 16px; }
+  .quickstart { min-height: 0; margin-top: 16px; padding: 24px 28px; }
+  .quickstart h2 { font-size: 23px; margin-bottom: 6px; }
+  .quickstart p { margin-bottom: 14px; font-size: 14px; }
+  .quickstart .art { height: 120px; }
+  .card + .card { margin-top: 14px; }
+}
+
+@media (min-width: 1201px) and (max-height: 700px) {
+  .stat { min-height: 168px; }
+  .stat .glyph svg { width: 40px; height: 40px; }
+  .stat .value { font-size: clamp(34px, 3.6vw, 54px); }
+  .stat .value.word { font-size: clamp(26px, 2.8vw, 42px); }
+}
+
+@media (max-height: 700px) {
+  .stat-grid { gap: 10px; }
+  .stat { padding-top: 12px; padding-bottom: 12px; }
+  .quickstart { margin-top: 12px; padding: 18px 22px; }
+  .quickstart h2 { font-size: 21px; }
+  .quickstart p { margin-bottom: 12px; }
+  .quickstart .art { height: 100px; }
+}
+
+@media (max-height: 880px) {
+  .nav { padding: 14px 14px; gap: 12px; }
+  .nav-logo { flex-direction: row; gap: 10px; padding: 2px 0 4px; }
+  .nav-logo svg { width: 38px; height: 38px; }
+  .nav-items { gap: 4px; }
+  .nav-item { padding: 10px 14px; font-size: 15px; }
+  .nav-card { padding: 12px 14px; }
+  .nav-card .head { margin-bottom: 8px; }
+  .source-row { padding: 5px 0; }
+  .source-row .when { display: none; }
+  .nav-foot { padding: 10px 12px; }
+}
+
+@media (max-height: 700px) {
+  .nav-logo .wordmark { font-size: 13px; }
+  .nav-item { padding: 8px 13px; font-size: 14.5px; }
+  /* Совсем низкое окно: от карточки источников остаётся только строка
+     состояния. Подробности по каждому источнику никуда не деваются — они в
+     колокольчике в шапке. */
+  .source-row { display: none; }
+  .nav-card .head { margin-bottom: 0; }
+}

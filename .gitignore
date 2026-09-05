@@ -18,3 +18,8 @@ web/dist/
 # Внутренние документы команды — в публичный репозиторий не идут
 CLAUDE.md
 docs/
+
+# Состояние сервиса: сохранённые пользователем полигоны
+data/polygons.json
+data/polygons.*.json
+data/results/
