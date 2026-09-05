@@ -62,6 +62,10 @@ export default function App() {
 
   // Состояние источников опрашиваем раз в минуту: ровно столько живёт кэш
   // проверки на сервере, чаще спрашивать бессмысленно.
+  const loadHealth = useCallback(
+    (force = false) => api.health(force).then(setHealth).catch(() => {}),
+    [],
+  )
   useEffect(() => {
     let alive = true
     const load = () => api.health().then((h) => alive && setHealth(h)).catch(() => {})
@@ -247,12 +251,17 @@ export default function App() {
         health={health}
         fieldsCount={summary?.polygons || 0}
         version={VERSION}
+        onRecheck={() => loadHealth(true)}
       />
 
       <div className="main">
+        {/* showRegion: на «Обзоре» регион выбирается в блоке быстрого старта —
+            как в макете, где в шапке остаются только глубина истории и
+            уведомления. В остальных разделах поиск нужен под рукой. */}
         <Topbar
           title={title}
           subtitle={subtitle}
+          showRegion={section !== 'overview'}
           region={region}
           onSearchRegion={searchRegion}
           places={places}
@@ -283,7 +292,17 @@ export default function App() {
         ) : (
           <div className="canvas scroll">
             {section === 'overview' && (
-              <Overview summary={summary} onGoMap={() => setSection('map')} />
+              <Overview
+                summary={summary}
+                onGoMap={() => setSection('map')}
+                onOpenField={openField}
+                region={region}
+                onSearchRegion={searchRegion}
+                places={places}
+                searching={searching}
+                searchNote={searchNote}
+                onPickPlace={pickPlace}
+              />
             )}
             {section === 'fields' && (
               <Fields

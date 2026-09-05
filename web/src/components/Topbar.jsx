@@ -14,10 +14,17 @@ export const YEAR_OPTIONS = [
   { years: 12, title: '12 сезонов', hint: 'полная история, счёт на минуты' },
 ]
 
-/** Шапка рабочего поля: заголовок раздела, регион, глубина истории, уведомления. */
+/**
+ * Шапка рабочего поля: заголовок раздела, регион, глубина истории, уведомления.
+ *
+ * showRegion — показывать ли поиск региона. На «Обзоре» он не нужен: там выбор
+ * региона стоит в блоке быстрого старта, ровно как в макете, где в шапке
+ * остаются только глубина истории и колокольчик.
+ */
 export default function Topbar({
   title,
   subtitle,
+  showRegion = true,
   region,
   onSearchRegion,
   places,
@@ -59,109 +66,110 @@ export default function Topbar({
           переносятся поодиночке, и колокольчик уезжает на вторую строку один,
           как будто что-то сломалось. */}
       <div className="topbar-actions">
-        {/* Регион */}
-      <div className="pill-wrap">
-        <button className="pill" onClick={() => setOpen(open === 'region' ? null : 'region')}>
-          <IconPin width={18} height={18} />
-          {region || 'Выбрать регион'}
-          <IconChevron className="chev" />
-        </button>
-        {open === 'region' && (
-          <div className="popover">
-            <h4>Поиск региона</h4>
-            <form
-              className="stack"
-              onSubmit={(event) => {
-                event.preventDefault()
-                onSearchRegion(new FormData(event.currentTarget).get('q'))
-              }}
-            >
-              <input
-                type="search"
-                className="field"
-                name="q"
-                autoFocus
-                placeholder="Сальский район, Кубань, Аксай…"
-              />
-              <button className="btn primary" type="submit" disabled={searching}>
-                {searching ? 'Ищу…' : 'Найти на карте'}
-              </button>
-            </form>
-            {searchNote && <p className="small muted">{searchNote}</p>}
-            {places?.length > 0 && (
-              <div style={{ marginTop: 10 }}>
-                {places.map((place) => (
-                  <button
-                    key={`${place.name}-${place.center.join()}`}
-                    className="menu-row"
-                    onClick={() => {
-                      onPickPlace(place)
-                      setOpen(null)
-                    }}
-                  >
-                    <div>{place.name.split(',').slice(0, 3).join(',')}</div>
-                    <div className="small muted">{place.type}</div>
+        {showRegion && (
+          <div className="pill-wrap">
+            <button className="pill" onClick={() => setOpen(open === 'region' ? null : 'region')}>
+              <IconPin width={18} height={18} />
+              {region || 'Выбрать регион'}
+              <IconChevron className="chev" />
+            </button>
+            {open === 'region' && (
+              <div className="popover">
+                <h4>Поиск региона</h4>
+                <form
+                  className="stack"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    onSearchRegion(new FormData(event.currentTarget).get('q'))
+                  }}
+                >
+                  <input
+                    type="search"
+                    className="field"
+                    name="q"
+                    autoFocus
+                    placeholder="Сальский район, Кубань, Аксай…"
+                  />
+                  <button className="btn primary" type="submit" disabled={searching}>
+                    {searching ? 'Ищу…' : 'Найти на карте'}
                   </button>
-                ))}
+                </form>
+                {searchNote && <p className="small muted">{searchNote}</p>}
+                {places?.length > 0 && (
+                  <div style={{ marginTop: 10 }}>
+                    {places.map((place) => (
+                      <button
+                        key={`${place.name}-${place.center.join()}`}
+                        className="menu-row"
+                        onClick={() => {
+                          onPickPlace(place)
+                          setOpen(null)
+                        }}
+                      >
+                        <div>{place.name.split(',').slice(0, 3).join(',')}</div>
+                        <div className="small muted">{place.type}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
         )}
-      </div>
 
-      {/* Глубина истории */}
-      <div className="pill-wrap">
-        <button className="pill" onClick={() => setOpen(open === 'years' ? null : 'years')}>
-          <IconCalendar width={18} height={18} />
-          {years} {years >= 5 ? 'сезонов' : 'сезона'}
-          <IconChevron className="chev" />
-        </button>
-        {open === 'years' && (
-          <div className="popover" style={{ width: 300 }}>
-            <h4>Сколько сезонов собирать</h4>
-            {YEAR_OPTIONS.map((option) => (
-              <button
-                key={option.years}
-                className={`menu-row${option.years === years ? ' active' : ''}`}
-                onClick={() => {
-                  onYears(option.years)
-                  setOpen(null)
-                }}
-              >
-                <div>{option.title}</div>
-                <div className="small muted">{option.hint}</div>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+        {/* Глубина истории */}
+        <div className="pill-wrap">
+          <button className="pill" onClick={() => setOpen(open === 'years' ? null : 'years')}>
+            <IconCalendar width={18} height={18} />
+            {years} {years >= 5 ? 'сезонов' : 'сезона'}
+            <IconChevron className="chev" />
+          </button>
+          {open === 'years' && (
+            <div className="popover" style={{ width: 300 }}>
+              <h4>Сколько сезонов собирать</h4>
+              {YEAR_OPTIONS.map((option) => (
+                <button
+                  key={option.years}
+                  className={`menu-row${option.years === years ? ' active' : ''}`}
+                  onClick={() => {
+                    onYears(option.years)
+                    setOpen(null)
+                  }}
+                >
+                  <div>{option.title}</div>
+                  <div className="small muted">{option.hint}</div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
-      {/* Уведомления */}
-      <div className="pill-wrap">
-        <button
-          className={`pill icon-only${alerts.length ? ' alert' : ''}`}
-          onClick={() => setOpen(open === 'alerts' ? null : 'alerts')}
-          title={alerts.length ? `Замечаний: ${alerts.length}` : 'Замечаний нет'}
-        >
-          <IconBell width={19} height={19} />
-        </button>
-        {open === 'alerts' && (
-          <div className="popover">
-            <h4>Состояние сбора</h4>
-            {alerts.length === 0 ? (
-              <p className="small muted" style={{ margin: 0 }}>
-                Все источники отвечают, данные последнего разбора собраны полностью.
-              </p>
-            ) : (
-              alerts.map((alert, index) => (
-                <div key={index} className="row" style={{ alignItems: 'flex-start', marginBottom: 10 }}>
-                  <span className={`dot ${alert.tone}`} style={{ marginTop: 7 }} />
-                  <span className="small">{alert.text}</span>
-                </div>
-              ))
-            )}
-          </div>
-        )}
+        {/* Уведомления */}
+        <div className="pill-wrap">
+          <button
+            className={`pill icon-only${alerts.length ? ' alert' : ''}`}
+            onClick={() => setOpen(open === 'alerts' ? null : 'alerts')}
+            title={alerts.length ? `Замечаний: ${alerts.length}` : 'Замечаний нет'}
+          >
+            <IconBell width={19} height={19} />
+          </button>
+          {open === 'alerts' && (
+            <div className="popover">
+              <h4>Состояние сбора</h4>
+              {alerts.length === 0 ? (
+                <p className="small muted" style={{ margin: 0 }}>
+                  Все источники отвечают, данные последнего разбора собраны полностью.
+                </p>
+              ) : (
+                alerts.map((alert, index) => (
+                  <div key={index} className="row" style={{ alignItems: 'flex-start', marginBottom: 10 }}>
+                    <span className={`dot ${alert.tone}`} style={{ marginTop: 7 }} />
+                    <span className="small">{alert.text}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
       </div>
     </header>

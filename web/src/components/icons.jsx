@@ -105,6 +105,13 @@ export const IconPencil = (p) => (
   </svg>
 )
 
+export const IconUser = (p) => (
+  <svg {...base} width="18" height="18" {...p}>
+    <circle cx="12" cy="8.5" r="3.6" />
+    <path d="M4.8 20c0-3.6 3.2-5.6 7.2-5.6s7.2 2 7.2 5.6" />
+  </svg>
+)
+
 /* --- крупные глифы карточек показателей: под макет, каждый своим цветом --- */
 
 const glyph = {

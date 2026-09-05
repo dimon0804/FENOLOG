@@ -1,16 +1,28 @@
-import { GlyphChart, GlyphCloud, GlyphSpike, IconArrow } from './icons.jsx'
+import { useEffect, useRef, useState } from 'react'
+
+import { GlyphChart, GlyphCloud, GlyphSpike, IconArrow, IconChevron } from './icons.jsx'
 import { SEVERITY, plural } from '../dict.js'
 
 /**
  * Экран «Обзор» — то, что видно при открытии сервиса.
  *
- * Три показателя и приглашение начать. Числа настоящие: участки и аномалии
- * берутся из сводки по сохранённым разборам, свежесть — из времени последнего
- * анализа. Придуманных значений здесь нет ни одного, иначе на защите первый же
- * вопрос «а откуда 312?» обнуляет доверие ко всему остальному.
+ * Верхний ряд — три показателя, нижний — быстрый старт и недавняя активность
+ * рядом, как в макете. Числа настоящие: участки и аномалии берутся из сводки по
+ * сохранённым разборам, свежесть — из времени последнего анализа. Придуманных
+ * значений здесь нет ни одного, иначе на защите первый же вопрос «а откуда 312?»
+ * обнуляет доверие ко всему остальному.
  */
-export default function Overview({ summary, onGoMap }) {
-  const fields = summary?.fields || []
+export default function Overview({
+  summary,
+  onGoMap,
+  onOpenField,
+  region,
+  onSearchRegion,
+  places,
+  searching,
+  searchNote,
+  onPickPlace,
+}) {
   const analyzed = summary?.analyzed || 0
   const anomalies = summary?.anomalies || { total: 0, critical: 0, suppression: 0 }
   const fresh = freshness(summary?.last_analyzed_at)
@@ -53,29 +65,19 @@ export default function Overview({ summary, onGoMap }) {
         />
       </div>
 
-      <div className="quickstart">
-        <h2>Быстрый старт</h2>
-        <p>Выберите регион и начните анализ ваших сельхозугодий</p>
-        <button className="btn primary" onClick={onGoMap}>
-          Перейти к карте
-          <IconArrow width={19} height={19} />
-        </button>
-        <Fields />
+      {/* Нижний ряд макета: приглашение начать слева, что происходило — справа. */}
+      <div className="overview-bottom">
+        <QuickStart
+          region={region}
+          onSearchRegion={onSearchRegion}
+          places={places}
+          searching={searching}
+          searchNote={searchNote}
+          onPickPlace={onPickPlace}
+          onGoMap={onGoMap}
+        />
+        <Activity summary={summary} onOpenField={onOpenField} onGoMap={onGoMap} />
       </div>
-
-      {fields.length > 0 && (
-        <div className="card" style={{ marginTop: 20 }}>
-          <h3>Где хуже всего</h3>
-          <p className="small muted" style={{ marginTop: -8 }}>
-            Поля отсортированы по самому глубокому отклонению от нормы.
-          </p>
-          <div className="stack" style={{ gap: 0 }}>
-            {fields.slice(0, 5).map((field) => (
-              <FieldLine key={field.id} field={field} />
-            ))}
-          </div>
-        </div>
-      )}
     </>
   )
 }
@@ -102,51 +104,178 @@ function Stat({ color, glyph, label, value, word, delta, deltaTone }) {
   )
 }
 
-function FieldLine({ field }) {
-  const digest = field.summary
-  const worst = digest?.worst_zscore
-  const tone = worst == null ? null : worst <= -2 ? SEVERITY.critical : SEVERITY.suppression
+/**
+ * Быстрый старт: выбрать регион и уйти на карту.
+ *
+ * Выбор региона стоит здесь, а не только в шапке, потому что это первое
+ * действие сценария: без района карта открывается над пустым местом, и человек
+ * не понимает, что делать дальше. Список районов не зашит — он приходит от
+ * геокодера, поэтому подходит любое название, а не десяток заготовленных.
+ */
+function QuickStart({ region, onSearchRegion, places, searching, searchNote, onPickPlace, onGoMap }) {
+  const [open, setOpen] = useState(false)
+  const wrap = useRef(null)
+
+  useEffect(() => {
+    const away = (event) => {
+      if (wrap.current && !wrap.current.contains(event.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', away)
+    return () => document.removeEventListener('mousedown', away)
+  }, [])
+
   return (
-    <div className="row" style={{ padding: '11px 0', borderTop: '1px solid var(--line)' }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 600 }}>{field.name}</div>
-        <div className="small muted">
-          {field.area_ha} га{field.crop_type ? ` · ${field.crop_type}` : ''}
-        </div>
+    <section className="quickstart">
+      <h2>Быстрый старт</h2>
+      <p>Выберите регион и начните анализ ваших сельхозугодий</p>
+
+      <div className="pick" ref={wrap}>
+        <button className="pick-btn" onClick={() => setOpen(!open)}>
+          <span className={region ? '' : 'ph'}>{region || 'Выберите регион'}</span>
+          <IconChevron className="chev" />
+        </button>
+        {open && (
+          <div className="popover left" style={{ top: 50 }}>
+            <h4>Поиск региона</h4>
+            <form
+              className="stack"
+              onSubmit={(event) => {
+                event.preventDefault()
+                onSearchRegion(new FormData(event.currentTarget).get('q'))
+              }}
+            >
+              <input
+                type="search"
+                className="field"
+                name="q"
+                autoFocus
+                placeholder="Сальский район, Кубань, Аксай…"
+              />
+              <button className="btn primary" type="submit" disabled={searching}>
+                {searching ? 'Ищу…' : 'Найти на карте'}
+              </button>
+            </form>
+            {searchNote && <p className="small muted">{searchNote}</p>}
+            {places?.length > 0 && (
+              <div style={{ marginTop: 10 }}>
+                {places.map((place) => (
+                  <button
+                    key={`${place.name}-${place.center.join()}`}
+                    className="menu-row"
+                    onClick={() => {
+                      onPickPlace(place)
+                      setOpen(false)
+                    }}
+                  >
+                    <div>{place.name.split(',').slice(0, 3).join(',')}</div>
+                    <div className="small muted">{place.type}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
-      {digest ? (
-        <>
-          <span className="small muted">
-            {plural(digest.anomalies, 'период', 'периода', 'периодов')}
-          </span>
-          {tone && (
-            <span className="tag" style={{ background: tone.soft, color: tone.color }}>
-              {worst.toFixed(1)} σ
-            </span>
-          )}
-        </>
-      ) : (
-        <span className="small muted">не анализировался</span>
-      )}
-    </div>
+
+      <button className="btn go" onClick={onGoMap}>
+        Перейти к карте
+        <IconArrow width={19} height={19} />
+      </button>
+    </section>
   )
 }
 
-/** Декоративная линия полей — правый край блока быстрого старта. */
-function Fields() {
-  return (
-    <svg className="art" width="430" height="150" viewBox="0 0 430 150" fill="none">
-      <g stroke="#4e9b36" strokeWidth="1.6" opacity="0.75">
-        <ellipse cx="190" cy="96" rx="150" ry="26" />
-        <ellipse cx="175" cy="112" rx="130" ry="22" />
-        <ellipse cx="205" cy="80" rx="120" ry="20" />
-        <ellipse cx="352" cy="118" rx="62" ry="13" />
-        <path d="M300 60c0-9 7-16 16-16s16 7 16 16h-32zM316 60v14" />
-        <path d="M370 84c0-7 5-12 12-12s12 5 12 12h-24zM382 84v11" />
-        <path d="M150 108c0-6 4-10 10-10s10 4 10 10h-20zM160 108v9" />
-      </g>
-    </svg>
+/**
+ * Недавняя активность: что происходило с полями и когда.
+ *
+ * Порядок — по времени последнего разбора, а не по глубине аномалии: экран
+ * отвечает на вопрос «что нового», и свежий пересчёт спокойного поля здесь
+ * важнее давно известной беды. Насколько всё плохо, видно по точке слева и по
+ * метке отклонения справа.
+ */
+function Activity({ summary, onOpenField, onGoMap }) {
+  const fields = [...(summary?.fields || [])].sort(
+    (a, b) => Date.parse(b.last_analyzed_at || 0) - Date.parse(a.last_analyzed_at || 0),
   )
+
+  return (
+    <section className="activity">
+      <h2>Недавняя активность</h2>
+
+      {fields.length === 0 ? (
+        <div className="empty">
+          Здесь появятся разобранные поля.
+          <div style={{ marginTop: 14 }}>
+            <button className="btn primary" onClick={onGoMap}>
+              Выбрать поле на карте
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="activity-list">
+          {fields.slice(0, 6).map((field) => (
+            <ActivityRow key={field.id} field={field} onOpen={onOpenField} />
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function ActivityRow({ field, onOpen }) {
+  const digest = field.summary
+  const worst = digest?.worst_zscore
+  const tone =
+    !digest ? null : worst != null && worst <= -2 ? SEVERITY.critical : SEVERITY.suppression
+
+  const state = rowState(digest)
+
+  return (
+    <button className="activity-row" onClick={() => onOpen(field)}>
+      <span className={`dot ${state.dot}`} />
+      <span className="who">
+        <span className="name">{field.name}</span>
+        <span className="what">{state.text}</span>
+      </span>
+      {digest && worst != null && (
+        <span className="tag" style={{ background: tone.soft, color: tone.color }}>
+          {worst.toFixed(1)} σ
+        </span>
+      )}
+      <span className="when">{ago(field.last_analyzed_at)}</span>
+    </button>
+  )
+}
+
+/** Точка и подпись строки: что именно случилось с полем при последнем разборе. */
+function rowState(digest) {
+  if (!digest) return { dot: 'idle', text: 'Ещё не разбиралось' }
+  if (digest.critical > 0) {
+    return {
+      dot: 'bad',
+      text: `Критических аномалий: ${digest.critical}`,
+    }
+  }
+  if (digest.anomalies > 0) {
+    return {
+      dot: 'warn',
+      text: `${plural(digest.anomalies, 'период', 'периода', 'периодов')} угнетения`,
+    }
+  }
+  return { dot: 'ok', text: 'Данные обновлены, отклонений нет' }
+}
+
+/** «2 ч назад» — насколько свежий разбор, без разглядывания даты. */
+function ago(stamp) {
+  if (!stamp) return 'не разбиралось'
+  const minutes = Math.max(0, Math.round((Date.now() - Date.parse(stamp)) / 60000))
+  if (minutes < 1) return 'только что'
+  if (minutes < 60) return `${plural(minutes, 'минуту', 'минуты', 'минут')} назад`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `${hours} ч назад`
+  const days = Math.round(hours / 24)
+  if (days < 30) return `${plural(days, 'день', 'дня', 'дней')} назад`
+  return new Date(stamp).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' })
 }
 
 function freshness(stamp) {
