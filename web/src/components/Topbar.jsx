@@ -75,6 +75,7 @@ export default function Topbar({
               }}
             >
               <input
+                type="search"
                 className="field"
                 name="q"
                 autoFocus
