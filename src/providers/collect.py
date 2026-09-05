@@ -54,6 +54,10 @@ class CollectReport:
     date_from: str | None = None
     date_to: str | None = None
     siblings: dict = field(default_factory=dict)   # диагностика поправки по соседям
+    # Сами ряды соседних полей. В meta НЕ уходят: это сотни точек на поле, и
+    # ответ API распух бы вдесятеро. Их забирает доменное ядро, чтобы сравнить
+    # поле с соседями, и складывает наружу уже готовый вывод, а не сырьё.
+    neighbours: list = field(default_factory=list, repr=False)
 
     def as_meta(self) -> dict:
         return {
@@ -173,13 +177,15 @@ def collect_series_with_report(
     # Снятие общей суточной помехи по соседним полям. Ошибка здесь не должна
     # ронять разбор: не нашлись соседи или не ответил источник — работаем без
     # поправки и честно пишем об этом в отчёт.
+    neighbour_series: list = report.neighbours
     if use_neighbours and observations:
         from src.providers.siblings import apply_correction, daily_correction
 
         corr, sib_info = _safe(
             "поправка по соседям",
             lambda: daily_correction(geometry, start, end,
-                                     progress=lambda s_, d_, t_: step(s_, d_, t_)),
+                                     progress=lambda s_, d_, t_: step(s_, d_, t_),
+                                     sink=neighbour_series),
             report, ({}, {"applied": False, "reason": "ошибка расчёта"}),
         )
         if corr:
@@ -226,6 +232,35 @@ def analyze_polygon(
         years=years, progress=progress, max_scenes=max_scenes,
         use_neighbours=use_neighbours,
     )
-    result = analyze(series)
+    # Соседи передаются ядру отдельным аргументом, а не через SeriesInput:
+    # контракт заморожен, а поля в нём под соседей не предусмотрено.
+    result = analyze(series, peers=_as_peer_fields(report.neighbours))
     result.meta.update(report.as_meta())
     return result
+
+
+def _as_peer_fields(raw: list[dict]) -> list:
+    """Переводит ряды соседей из формата провайдера в контракт доменного ядра.
+
+    Перевод, а не общий формат: ядро не должно знать ни про OSM, ни про то, что
+    сосед вообще откуда-то качался, а провайдер не должен знать про PeerField.
+    """
+    if not raw:
+        return []
+    try:
+        from src.core.peers import PeerField
+    except ImportError:  # pragma: no cover — ядро может собираться отдельно
+        return []
+    out = []
+    for item in raw:
+        obs = [o for o in item.get("observations", [])
+               if o.ndvi is not None]
+        if len(obs) < 8:
+            continue
+        out.append(PeerField(
+            peer_id=item.get("peer_id", "peer"),
+            dates=[o.date for o in obs],
+            values=[float(o.ndvi) for o in obs],
+            crop_type=item.get("crop_hint"),
+        ))
+    return out

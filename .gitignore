@@ -7,6 +7,9 @@ data/cache/
 data/raw/
 models/*.pkl
 !models/e05_lgbm.pkl
+# Классификатор культуры: без него сервис не падает, но перестаёт
+# определять культуру на полях, где её не указали. Файл мелкий.
+!models/crop_classifier.pkl
 models/_*.pkl
 models/*.joblib
 node_modules/
@@ -23,6 +26,8 @@ docs/
 data/polygons.json
 data/polygons.*.json
 data/results/
+# Логи рабочих прогонов: пересобираются любой командой, в репозиторий не идут
+reports/_*.log
 reports/_server.log
 reports/demo_field.json
 reports/_server8001.log

@@ -89,9 +89,36 @@ def cmd_analyze(geometry: dict, polygon_id: str, crop_type, args) -> None:
     print(f"  точек в ряду          {len(result.series)}")
     print(f"  из них восстановлено  {restored}")
     print(f"  источник нормы        {meta.get('climatology_source')}")
-    if meta.get("climatology_source") == "crop":
-        print("    (у поля нет собственной истории — норма средняя по культуре,")
-        print("     оценка ориентировочная)")
+    if meta.get("climatology_source") == "crop" and meta.get("climatology_note"):
+        print(f"    {meta['climatology_note']}")
+
+    crop = meta.get("crop_detection") or {}
+    print()
+    print("КУЛЬТУРА")
+    print(f"  используется          {meta.get('crop_type') or 'не определена'} "
+          f"(источник: {meta.get('crop_source')})")
+    if crop.get("detected"):
+        print(f"  видно в данных        {crop['detected']} "
+              f"(уверенность {crop.get('confidence', 0):.2f}, "
+              f"{crop.get('named_by', '?')})")
+    if crop.get("group"):
+        print(f"  группа                {crop['group']} "
+              f"(уверенность {crop.get('group_confidence', 0):.2f})")
+    if crop.get("note"):
+        print(f"  {crop['note']}")
+    if crop.get("conflict"):
+        print("  ! ЗАЯВЛЕННАЯ КУЛЬТУРА РАСХОДИТСЯ С ДАННЫМИ — см. фразу выше")
+
+    peers = meta.get("peers")
+    if peers:
+        print()
+        print("СОСЕДНИЕ ПОЛЯ")
+        print(f"  найдено рядом         {peers.get('peers_total')}, "
+              f"своей группы {peers.get('peers_same_group')}")
+        for name, n in (peers.get("crop_mix") or {}).items():
+            print(f"    {n:>2}  {name}")
+        if peers.get("verdict"):
+            print(f"  {peers['verdict']}")
 
     print()
     print(f"НАЙДЕННЫЕ ПЕРИОДЫ УГНЕТЕНИЯ: {len(result.anomalies)}")

@@ -497,6 +497,19 @@ def build_pdf(result: dict, polygon: dict | None = None) -> bytes:
                 "неё значение окажется с высокой вероятностью. Чем дальше от "
                 "сегодняшнего дня, тем шире область — так и должно быть."))
 
+    # Поле на фоне соседей. Блок необязательный: соседей может не быть вовсе
+    # или все они окажутся под другой культурой — тогда сравнивать нечестно, и
+    # раздел просто не печатается, а не показывает пустую таблицу.
+    pb = plain.peers_block(result)
+    if pb:
+        story.append(Spacer(1, 5 * mm))
+        p_acc, p_bg = TONES.get(pb.get("tone", "ok"), TONES["nodata"])
+        h2("Поле на фоне соседей")
+        story.append(_card(
+            [Paragraph(pb["headline"], s["h3"])]
+            + [Paragraph(line, s["body"]) for line in pb["lines"]],
+            p_acc, p_bg, s, pad=4 * mm))
+
     story.append(PageBreak())
 
     # ------------------------------------------------------------------ #

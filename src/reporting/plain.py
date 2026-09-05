@@ -486,9 +486,21 @@ def field_summary(result: dict, polygon: dict | None = None) -> list[tuple[str, 
     if name:
         rows.append(("Поле", name))
 
+    # Культура. Показывается вместе с тем, откуда она взялась: «озимая пшеница»
+    # из карточки поля и «озимая пшеница, определена сервисом» — это разные по
+    # надёжности сведения, и в документе для банка разница существенна.
     crop = polygon.get("crop_type") or meta.get("crop_type")
     crop = str(crop).strip() if crop else ""
-    rows.append(("Культура", crop if crop else "не указана"))
+    detection = meta.get("crop_detection") or {}
+    if not crop:
+        rows.append(("Культура", "не указана и не определена"))
+    elif meta.get("crop_source") == "detected":
+        conf = _safe(detection.get("confidence"))
+        suffix = f", определена сервисом по форме кривой (уверенность {_num(conf, 2)})" \
+            if conf is not None else ", определена сервисом по форме кривой"
+        rows.append(("Культура", crop + suffix))
+    else:
+        rows.append(("Культура", crop))
 
     area = _safe(polygon.get("area_ha"))
     if area is not None:
@@ -1002,6 +1014,80 @@ def forecast_block(result: dict) -> dict:
 # ============================================================================
 
 
+def peers_block(result: dict) -> dict | None:
+    """Поле на фоне соседей — понятным языком. None, если сравнивать было не с чем.
+
+    Раздел отвечает на первый вопрос любого агронома и любого страховщика: это у
+    меня одного или у всех. Ответ на него меняет решение целиком, поэтому он
+    вынесен отдельным блоком, а не спрятан в пояснении к периоду.
+    """
+    meta = _meta(result)
+    peers = meta.get("peers")
+    if not isinstance(peers, dict) or not peers.get("peers_same_group"):
+        return None
+
+    total = int(_safe(peers.get("peers_total"), 0) or 0)
+    same = int(_safe(peers.get("peers_same_group"), 0) or 0)
+    lines: list[str] = []
+
+    rank = peers.get("rank") or {}
+    place, of = _safe(rank.get("place")), _safe(rank.get("of"))
+    delta = _safe(rank.get("delta_pct"))
+    headline = "Поле на фоне соседей"
+    tone = "ok"
+    if place is not None and of is not None:
+        headline = f"{int(place)} место из {int(of)} среди соседних полей"
+    if delta is not None:
+        if delta >= 5:
+            lines.append(
+                f"За сезон поле набрало биомассы на {_pct(abs(delta) / 100)} больше, "
+                f"чем в среднем соседние поля той же группы."
+            )
+        elif delta <= -5:
+            tone = "warn"
+            lines.append(
+                f"За сезон поле набрало биомассы на {_pct(abs(delta) / 100)} меньше, "
+                f"чем в среднем соседние поля той же группы. Это не приговор — "
+                f"разница может объясняться сортом, сроком сева или почвой, — но "
+                f"повод посмотреть, чем соседи отличаются."
+            )
+        else:
+            lines.append(
+                "За сезон поле набрало примерно столько же биомассы, сколько соседние "
+                "поля той же группы: заметной разницы нет."
+            )
+
+    other = total - same
+    if other > 0:
+        lines.append(
+            f"Сравнение шло только с {same} полями своей группы. Ещё {other} соседних "
+            f"полей заняты другой культурой, и в сравнение они не брались: у другой "
+            f"культуры другой календарь развития, и разница с ней говорила бы о "
+            f"культуре, а не о состоянии поля."
+        )
+
+    district = [p for p in (peers.get("periods") or []) if p.get("scope") == "район"]
+    local = [p for p in (peers.get("periods") or []) if p.get("scope") == "поле"]
+    if district:
+        lines.append(
+            f"Просадок, которые случились по всему району: {len(district)}. В такие "
+            f"периоды вместе с этим полем проседали и соседние — причину стоит искать "
+            f"в погоде, а не в поле."
+        )
+    if local:
+        tone = "warn" if tone == "ok" else tone
+        lines.append(
+            f"Просадок, которых у соседей не было: {len(local)}. Погода легла на район "
+            f"одинаково, а просело только это поле — значит дело в нём самом: "
+            f"агротехника, семена, техника, вредители."
+        )
+
+    if not lines:
+        return None
+    return {"headline": headline, "tone": tone, "lines": lines,
+            "peers_total": total, "peers_same_group": same}
+
+
 def glossary() -> list[tuple[str, str]]:
     """Словарик в конце отчёта: термины, которые всё же пришлось оставить."""
     return [
@@ -1138,12 +1224,37 @@ def caveats(result: dict) -> list[str]:
                 f"могут заметно сдвинуть все выводы."
             )
 
+    # Определённая сервисом культура — это предположение, и оно влияет на окно
+    # уборки и на эталон продуктивности. Умолчать о нём в документе для банка
+    # нельзя: получится, что сервис выдал свою догадку за данные хозяйства.
+    detection = meta.get("crop_detection") or {}
+    if meta.get("crop_source") == "detected" and detection.get("detected"):
+        out.append(
+            f"Культура «{detection['detected']}» не была указана — сервис определил её "
+            f"сам, по форме сезонной кривой. Проверено это определение на 78 полях: "
+            f"конкретная культура угадывается примерно в трёх случаях из четырёх, "
+            f"крупная группа (озимые против яровых) — в девяти из десяти. От культуры "
+            f"зависят ожидаемое окно уборки и эталон продуктивности, поэтому, если "
+            f"культура вам известна, впишите её — расчёт станет точнее."
+        )
+    if detection.get("conflict"):
+        c = detection["conflict"]
+        out.append(
+            f"Заявленная культура «{c.get('declared')}» расходится с тем, что видно "
+            f"в данных: поле развивается как «{c.get('observed_group')}». Чаще всего "
+            f"это означает, что сменился севооборот, а карточка поля осталась "
+            f"старой. Пока расхождение не выяснено, к выводам про продуктивность "
+            f"и сроки стоит относиться с осторожностью."
+        )
+
     clim = meta.get("climatology_source")
     if clim == "crop":
+        note = meta.get("climatology_note")
         out.append(
             "Норма для сравнения взята не по самому полю, а усреднённая по культуре. "
             "Она грубее: поле может закономерно отличаться от средней по культуре, "
             "и это будет засчитано как отклонение."
+            + (f" {note}" if note and "подобран по форме кривой" in str(note) else "")
         )
     elif clim == "none" or meta.get("has_climatology") is False:
         out.append(

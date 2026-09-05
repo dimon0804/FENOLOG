@@ -110,12 +110,20 @@ def daily_correction(
     progress=None,
     count: int = NEIGHBOUR_COUNT,
     radius_km: float = NEIGHBOUR_RADIUS_KM,
+    sink: list | None = None,
 ) -> tuple[dict[date, float], dict]:
     """Общая суточная помеха по соседним полям.
 
     Возвращает (поправка по датам, диагностика). Пустая поправка — штатный
     исход: соседей не нашлось, источники не ответили, времени не хватило.
     Разбор в этом случае просто идёт без неё.
+
+    sink — необязательный список, куда складываются сами ряды соседей в виде
+    (идентификатор, геометрия, наблюдения). Нужен затем, что ряды эти уже
+    скачаны и лежат в памяти: доменное ядро сравнивает поле с соседями (кто
+    просел вместе с ним, а кто нет), и качать те же снимки второй раз ради
+    этого было бы расточительством. Провайдер при этом остаётся провайдером —
+    он ничего не считает, а только не выбрасывает то, что уже принёс.
     """
     t0 = time.perf_counter()
     info = {"requested": count, "used": 0, "applied": False, "reason": None}
@@ -185,11 +193,20 @@ def daily_correction(
             left = max(TIME_BUDGET_S - (time.perf_counter() - t0), 1.0)
             for fut in as_completed(futures, timeout=left):
                 try:
-                    res = _residuals(fut.result())
+                    obs = fut.result()
+                    res = _residuals(obs)
                 except Exception:  # noqa: BLE001
-                    res = {}
+                    obs, res = [], {}
                 if res:
                     tables.append(res)
+                if sink is not None and obs:
+                    n = futures[fut]
+                    sink.append({
+                        "peer_id": str(n.get("id") or n.get("name") or f"peer-{len(sink) + 1}"),
+                        "geometry": n.get("geometry"),
+                        "crop_hint": n.get("crop_hint"),
+                        "observations": obs,
+                    })
                 done += 1
                 if progress:
                     try:

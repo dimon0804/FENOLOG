@@ -13,8 +13,21 @@ from datetime import date, timedelta
 import numpy as np
 import pandas as pd
 
-from src.contracts import AnalysisResult, SeriesInput, SeriesPoint
-from src.core.anomaly import build_periods
+from src.contracts import (
+    CAUSE_ABRUPT,
+    CAUSE_DROUGHT,
+    CAUSE_EXCESS_WATER,
+    CAUSE_HEAT,
+    AnalysisResult,
+    SeriesInput,
+    SeriesPoint,
+)
+from src.core.anomaly import (
+    CAUSE_COLD,
+    CAUSE_HARVEST,
+    CAUSE_NON_WEATHER,
+    build_periods,
+)
 from src.core.climatology import (
     MIN_STD,
     fit_climatology_loo,
@@ -48,6 +61,26 @@ try:  # pragma: no cover
     from src.core.agrolog import explain_with_agro  # type: ignore
 except ImportError:  # pragma: no cover
     explain_with_agro = None  # type: ignore
+
+# Определение культуры по форме сезонной кривой. Раньше культура была известна
+# только со слов пользователя, а не сказать её мог кто угодно: из тегов OSM она
+# приходит у считанных полей. Без культуры поле получает усреднённую норму,
+# «общерегиональное» окно уборки и продуктивность, которую не с чем сравнить.
+# Модуль закрывает эту дыру и заодно ловит расхождение: поле, записанное как
+# озимая пшеница, три года спустя вполне может быть занято другим — севооборот
+# в сервис никто не вносит.
+try:  # pragma: no cover
+    from src.core.crop_profile import identify_crop  # type: ignore
+except ImportError:  # pragma: no cover
+    identify_crop = None  # type: ignore
+
+# Сравнение с соседними полями. Отвечает на вопрос, который агроном задаёт
+# первым: «это у меня одного или у всех?». Сравнивать при этом можно только с
+# полями своей культуры, поэтому модуль опирается на определение культуры.
+try:  # pragma: no cover
+    from src.core.peers import compare_with_peers  # type: ignore
+except ImportError:  # pragma: no cover
+    compare_with_peers = None  # type: ignore
 
 # Прогноз развития поля вперёд. Заказчик кейса сформулировал прямо: «прогнозы
 # должна давать программа». Модуль опирается на климатическую норму и переносит
@@ -136,6 +169,54 @@ def _crop_norm(crop_type: str | None, doys: np.ndarray):
 
 
 
+def _identify(df: pd.DataFrame, declared: str | None) -> dict:
+    """Определяет культуру по ряду наблюдений. Ошибка здесь не роняет анализ.
+
+    Отдельная функция, а не пара строк внутри analyze(), по одной причине: у
+    определения культуры три штатных исхода отказа (модуля нет, эталонов нет,
+    сезон покрыт слишком редко), и все три должны заканчиваться одинаково —
+    работаем с тем, что сказал пользователь, и честно пишем об этом в meta.
+    """
+    fallback = {
+        "crop": declared, "source": "user" if declared else "unknown",
+        "detected": None, "confidence": 0.0, "norm_crop": declared,
+        "conflict": None, "note": "определение культуры недоступно",
+    }
+    if identify_crop is None:
+        return fallback
+    try:
+        return identify_crop(df["date"].dt.date.tolist(), df["ndvi"].tolist(), declared)
+    except Exception:  # noqa: BLE001 — определение культуры вспомогательное
+        return fallback
+
+
+def _norm_note(clim_kind: str, crop_type: str | None, norm_crop: str | None) -> str:
+    """Объясняет словами, откуда взялась норма. Нужна ровно в одном случае.
+
+    Случай такой: пользователь назвал культуру, а норма подобрана по другой.
+    Без объяснения это выглядит ошибкой сервиса, а на деле это измеренный выбор
+    (E19): норма — это кластер похожих кривых, и полю точнее подходит ближайший
+    кластер, а не тот, что подписан его агрономическим названием. Поле озимой
+    пшеницы с низким уровнем описывается нормой подсолнечника лучше, чем нормой
+    своей культуры, и z-оценка от этого становится честнее, а не хуже.
+    """
+    if clim_kind == "polygon":
+        return "норма построена по собственной истории поля"
+    if clim_kind != "crop":
+        return "нормы нет: не хватает истории наблюдений"
+    if norm_crop and crop_type and norm_crop != crop_type:
+        return (
+            f"у поля нет своей истории, поэтому норма взята по культуре. Эталон "
+            f"подобран по форме кривой — ближе всего подошёл «{norm_crop}», хотя "
+            f"заявлена культура «{crop_type}». Это не утверждение о том, что "
+            f"растёт на поле: так точнее описывается его уровень и календарь."
+        )
+    return (
+        f"у поля нет своей истории, норма взята средняя по культуре "
+        f"«{norm_crop or crop_type}» — оценка ориентировочная"
+    )
+
+
 def _apply_agro_journal(anomalies, agro_events, crop_type) -> None:
     """Дополняет найденные периоды сведениями из журнала работ.
 
@@ -184,9 +265,61 @@ def _apply_agro_journal(anomalies, agro_events, crop_type) -> None:
             a.evidence.update(evidence)
 
 
+def _compare_peers(df, crop_type, anomalies, peers):
+    """Сравнение с соседними полями. Отсутствие соседей — штатный исход."""
+    if not peers or compare_with_peers is None:
+        return None
+    try:
+        return compare_with_peers(
+            df["date"].dt.date.tolist(), df["ndvi"].tolist(), peers,
+            crop_type=crop_type, anomalies=anomalies,
+        )
+    except Exception:  # noqa: BLE001 — сравнение вспомогательное
+        return None
+
+
+def _apply_peer_scope(anomalies, peer_report: dict) -> None:
+    """Дописывает к периодам, районное это явление или только на этом поле.
+
+    Уверенность в версии причины при этом двигается, и в обе стороны. Логика
+    простая и проверяемая: если соседи той же культуры просели вместе с полем,
+    погодная версия становится вероятнее — погода на район ложится одинаково.
+    Если соседи стоят целые, погодная версия слабеет, а «причина не погодная»
+    наоборот усиливается: под одним и тем же дождём одно поле просело, а пять
+    соседних нет.
+    """
+    weather_causes = {CAUSE_DROUGHT, CAUSE_HEAT, CAUSE_EXCESS_WATER, CAUSE_COLD}
+    # Версии, для которых вывод «районное или локальное» бессмыслен. Уборка
+    # локальна по своей природе: каждое хозяйство убирает в свой день, и
+    # советовать после неё «проверьте вредителей» — значит пугать на ровном
+    # месте. Факт про соседей при этом остаётся: он говорит о ходе уборки
+    # в районе, и это полезно само по себе.
+    scope_irrelevant = {CAUSE_HARVEST, CAUSE_ABRUPT}
+    by_start = {p["start"]: p for p in peer_report.get("periods", [])}
+    for a in anomalies:
+        info = by_start.get(str(a.start))
+        if not info:
+            continue
+        district = info["scope"] == "район"
+        tail = info["fact"] if a.cause in scope_irrelevant else f"{info['fact']} {info['verdict']}"
+        a.explanation = (a.explanation.rstrip() + " " + tail).strip()
+        a.evidence["peers_checked"] = info["peers_checked"]
+        a.evidence["peers_depressed"] = info["peers_depressed"]
+        a.evidence["scope"] = info["scope"]
+        if a.cause in weather_causes:
+            delta = 0.10 if district else -0.15
+        elif a.cause == CAUSE_NON_WEATHER:
+            delta = -0.10 if district else 0.10
+        else:
+            delta = 0.0
+        if delta:
+            a.cause_confidence = float(min(0.95, max(0.05, a.cause_confidence + delta)))
+
+
 def analyze(inp: SeriesInput, output_step: int = OUTPUT_STEP_DAYS,
             agro_events: list | None = None,
-            forecast_days: int = 30) -> AnalysisResult:
+            forecast_days: int = 30,
+            peers: list | None = None) -> AnalysisResult:
     """Собирает ряд, восстанавливает пропуски, считает норму и находит аномалии.
 
     agro_events — журнал работ по полю (список AgroEvent из src/core/agrolog.py).
@@ -209,6 +342,16 @@ def analyze(inp: SeriesInput, output_step: int = OUTPUT_STEP_DAYS,
     ).sort_values("date")
     # Если на одну дату пришло несколько сенсоров, берём медиану
     df = df.groupby("date", as_index=False).agg(ndvi=("ndvi", "median"), source=("source", "first"))
+
+    # Культура определяется до всего остального: от неё зависит и норма, и окно
+    # уборки, и эталон продуктивности. Заявленная пользователем культура имеет
+    # приоритет в названии, но не отменяет проверку — расхождение с тем, что
+    # видно в данных, это самостоятельный и полезный результат.
+    crop_info = _identify(df, inp.crop_type)
+    crop_type = crop_info.get("crop") or inp.crop_type
+    # Норму выбирает не название, а сходство кривых: измерено, что так ближе к
+    # настоящей кривой поля, чем даже по точно известной культуре (E19).
+    norm_crop = crop_info.get("norm_crop") or crop_type
 
     t_days = df["date"].map(pd.Timestamp.toordinal).to_numpy()
     # Сглаживание здесь намеренно мягче, чем в задаче восстановления пропусков,
@@ -248,7 +391,13 @@ def analyze(inp: SeriesInput, output_step: int = OUTPUT_STEP_DAYS,
         # (медиана корреляции кривых внутри культуры 0.95 против 0.86 между
         # культурами, но RMSE между двумя полями пшеницы 0.108), поэтому
         # помечается отдельно и понижает уверенность в версии причины.
-        crop = _crop_norm(inp.crop_type, doys)
+        crop = _crop_norm(norm_crop, doys)
+        if crop is None and norm_crop != crop_type:
+            # Подобранного эталона может не оказаться в норме (культура редкая
+            # или норма собрана на другом наборе). Тогда честный запасной шаг —
+            # культура, которую назвал пользователь, а не отказ от нормы вовсе.
+            norm_crop = crop_type
+            crop = _crop_norm(norm_crop, doys)
         if crop is not None:
             clim_mean, clim_std = crop
             clim_std = np.where(np.isfinite(clim_std) & (clim_std > MIN_STD), clim_std, MIN_STD)
@@ -312,12 +461,18 @@ def analyze(inp: SeriesInput, output_step: int = OUTPUT_STEP_DAYS,
         grid_dates,
         z_for_search,
         inp.weather,
-        crop_type=inp.crop_type,
+        crop_type=crop_type,
         norm_is_crop=(clim_kind == "crop"),
         observed=observed_flags,
     )
 
-    _apply_agro_journal(anomalies, agro_events, inp.crop_type)
+    _apply_agro_journal(anomalies, agro_events, crop_type)
+
+    # Сравнение с соседями идёт после поиска периодов: по каждому найденному
+    # периоду проверяется, просели ли в те же дни соседние поля своей культуры.
+    peer_report = _compare_peers(df, crop_type, anomalies, peers)
+    if peer_report:
+        _apply_peer_scope(anomalies, peer_report)
 
     # Прогноз кладём в meta, а не в отдельное поле результата: контракт
     # AnalysisResult заморожен, а meta для того и существует. Слой API отдаёт
@@ -327,7 +482,7 @@ def analyze(inp: SeriesInput, output_step: int = OUTPUT_STEP_DAYS,
         try:
             forecast = forecast_season(
                 grid_dates, restored, clim_mean, clim_std,
-                crop_type=inp.crop_type, horizon_days=forecast_days,
+                crop_type=crop_type, horizon_days=forecast_days,
                 n_reference_years=clim_years or None,
                 clim_source=clim_kind,
                 last_observation=max(observed_map) if observed_map else None,
@@ -340,7 +495,7 @@ def analyze(inp: SeriesInput, output_step: int = OUTPUT_STEP_DAYS,
         try:
             score = field_score(
                 grid_dates, restored, clim_mean, clim_std, z, anomalies,
-                crop_type=inp.crop_type, climatology_source=clim_kind,
+                crop_type=crop_type, climatology_source=clim_kind,
                 observed=observed_flags,
             )
         except Exception:  # noqa: BLE001 — оценка не имеет права ронять анализ
@@ -361,7 +516,22 @@ def analyze(inp: SeriesInput, output_step: int = OUTPUT_STEP_DAYS,
             # "crop" — средняя по типу культуры (грубее, честно помечаем),
             # "none" — нормы нет, аномалии не ищутся.
             "climatology_source": clim_kind,
-            "crop_type": inp.crop_type,
+            # Культура, с которой работал анализ. Может отличаться от того, что
+            # прислал вызывающий: если он не прислал ничего, она определена по
+            # кривой. Откуда она взялась, говорит crop_source.
+            "crop_type": crop_type,
+            "crop_declared": inp.crop_type,
+            "crop_source": crop_info.get("source"),
+            # Полный разбор определения культуры: что увидено, с какой
+            # уверенностью, чьей нормой меряем и спорит ли увиденное с
+            # заявленным. Интерфейсу нужна и фраза note, и поле conflict.
+            "crop_detection": crop_info,
+            "climatology_crop": norm_crop if clim_kind == "crop" else None,
+            "climatology_note": _norm_note(clim_kind, crop_type, norm_crop),
+            # Сравнение с соседними полями: место поля в округе и разбор каждого
+            # периода на «районное явление» против «только на этом поле». None,
+            # если соседей не подали или их оказалось слишком мало.
+            "peers": peer_report,
             # Прогноз развития поля вперёд от последней даты ряда. None, если
             # нормы нет или модуль прогноза недоступен — интерфейс тогда просто
             # не рисует продолжение кривой.

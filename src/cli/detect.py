@@ -112,9 +112,17 @@ def main() -> None:
             source = result.meta.get("climatology_source")
             print(f"Полигон {polygon_id}: наблюдений {result.meta.get('n_obs')}, "
                   f"норма по источнику «{source}», найдено периодов {len(found)}")
-            if source == "crop":
-                print("  Внимание: у поля нет собственной истории, норма взята средняя "
-                      "по культуре — оценка ориентировочная.")
+            note = result.meta.get("climatology_note")
+            if source == "crop" and note:
+                print(f"  Норма: {note}")
+            crop = result.meta.get("crop_detection") or {}
+            if crop.get("note"):
+                print(f"  Культура: {crop['note']}")
+            if crop.get("conflict"):
+                # Расхождение заявленного с увиденным выносится отдельной
+                # строкой: в CSV оно не помещается, а для агронома это самая
+                # ценная строка вывода — она означает, что данные о поле устарели.
+                print("  ! Заявленная культура расходится с тем, что видно в данных.")
             print()
             for a in sorted(result.anomalies, key=lambda x: x.min_zscore):
                 print(f"  {a.start} .. {a.end}  ({a.duration_days} дн)  "
