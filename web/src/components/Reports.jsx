@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 import { api } from '../api.js'
 import { anomaliesCsv, safeName, save, seriesCsv } from '../csv.js'
-import { SEVERITY, formatDate, plural } from '../dict.js'
+import { formatDate, plural } from '../dict.js'
 import { IconDownload } from './icons.jsx'
 
 /**
@@ -75,7 +75,9 @@ export default function Reports({ summary, onGoMap }) {
                   разбор от {formatDate(field.last_analyzed_at)}
                 </div>
               </div>
-              <div className="row" style={{ gap: 8 }}>
+              {/* Кнопок четыре, и в узком окне они обязаны переноситься:
+                  без wrap ряд не влезал в карточку и обрезался по краю. */}
+              <div className="row wrap" style={{ gap: 8 }}>
                 {/* Отчёт для человека идёт первым и выделен: выгрузки рядом —
                     это данные для аналитика, а PDF читают без подготовки. */}
                 <a
@@ -119,14 +121,10 @@ export default function Reports({ summary, onGoMap }) {
                 {plural(digest.anomalies, 'период', 'периода', 'периодов')}
               </span>
               {digest.critical > 0 && (
-                <span className="chip" style={{ color: SEVERITY.critical.color }}>
-                  критических: {digest.critical}
-                </span>
+                <span className="chip tone-critical">критических: {digest.critical}</span>
               )}
               {digest.suppression > 0 && (
-                <span className="chip" style={{ color: SEVERITY.suppression.color }}>
-                  угнетения: {digest.suppression}
-                </span>
+                <span className="chip tone-suppression">угнетения: {digest.suppression}</span>
               )}
               {digest.worst_zscore != null && (
                 <span className="chip">худшее отклонение {digest.worst_zscore.toFixed(1)} σ</span>

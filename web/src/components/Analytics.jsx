@@ -13,12 +13,14 @@ import {
 import { api } from '../api.js'
 import { safeName, save, seriesCsv } from '../csv.js'
 import { FIELD_STATE, formatDate } from '../dict.js'
+import { usePalette } from '../theme.js'
 import { IconDownload } from './icons.jsx'
 
-// Цвета линий сравнения. Намеренно не из смысловой тройки и не из палитры
-// классов аномалий: здесь цвет означает всего лишь «поле номер такой-то», и
-// путать его с «критическая аномалия» нельзя.
-const LINES = ['#2f6b2a', '#1f34d4', '#8b2fe8', '#c46a12', '#0f8f8f']
+// Цвета линий сравнения приходят из переменной --chart-compare: они намеренно
+// не из смысловой тройки и не из палитры классов аномалий — здесь цвет означает
+// всего лишь «поле номер такой-то», и путать его с «критическая аномалия»
+// нельзя. В тёмной теме набор свой: тёмно-зелёный и тёмно-синий на тёмном фоне
+// неразличимы между собой и с самим фоном.
 const MAX_COMPARE = 5
 
 // Зоны состояния — те же пороги, по которым ядро выделяет периоды: глубже двух
@@ -41,6 +43,7 @@ const ZONES = [
  * ради чего сервис перестаёт быть инструментом по одному полю.
  */
 export default function Analytics({ summary, onOpenField }) {
+  const palette = usePalette()
   const analyzed = useMemo(
     () => (summary?.fields || []).filter((f) => f.summary),
     [summary],
@@ -143,7 +146,7 @@ export default function Analytics({ summary, onOpenField }) {
               label="NDVI, среднее"
               value={stats.meanNdvi?.toFixed(2)}
               note={stats.meanDelta}
-              spark={<Spark values={stats.spark} color="#2f6b2a" />}
+              spark={<Spark values={stats.spark} color={palette.series} />}
             />
             <Kpi
               label="Худшее отклонение"
@@ -154,7 +157,7 @@ export default function Analytics({ summary, onOpenField }) {
                   ? { text: formatDate(stats.worstAt), tone: 'muted' }
                   : { text: 'отклонений нет', tone: 'muted' }
               }
-              spark={<Spark values={stats.sparkZ} color="#d4342a" />}
+              spark={<Spark values={stats.sparkZ} color={palette.critical} />}
             />
             <Kpi
               label="Дней с отклонением"
@@ -163,14 +166,14 @@ export default function Analytics({ summary, onOpenField }) {
                 text: `${Math.round((stats.anomalyDays / Math.max(stats.days, 1)) * 100)}% дней периода`,
                 tone: stats.anomalyDays ? 'bad' : 'muted',
               }}
-              spark={<Bars values={stats.anomalyByMonth} color="#d4342a" />}
+              spark={<Bars values={stats.anomalyByMonth} color={palette.critical} />}
             />
             <Kpi
               label="Осадки"
               value={stats.rain == null ? '—' : Math.round(stats.rain)}
               unit={stats.rain == null ? '' : 'мм'}
               note={stats.rainDelta}
-              spark={<Bars values={stats.rainByMonth} color="#4e9b36" />}
+              spark={<Bars values={stats.rainByMonth} color={palette.green} />}
             />
           </div>
 
@@ -179,7 +182,7 @@ export default function Analytics({ summary, onOpenField }) {
               <h3>Динамика NDVI</h3>
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={stats.chart} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
-                  <CartesianGrid stroke="#eee" vertical={false} />
+                  <CartesianGrid stroke={palette.grid} vertical={false} />
                   <XAxis
                     dataKey="t"
                     type="number"
@@ -194,26 +197,26 @@ export default function Analytics({ summary, onOpenField }) {
                           ? { month: 'short', year: '2-digit' }
                           : { day: '2-digit', month: '2-digit' },
                       )}
-                    tick={{ fontSize: 11, fill: '#6f6f6f' }}
-                    stroke="#ddd"
+                    tick={{ fontSize: 11, fill: palette.tick }}
+                    stroke={palette.axis}
                     minTickGap={44}
                   />
                   <YAxis
                     domain={[0, 1]}
                     allowDataOverflow
                     tickFormatter={(v) => v.toFixed(1)}
-                    tick={{ fontSize: 11, fill: '#6f6f6f' }}
-                    stroke="#ddd"
+                    tick={{ fontSize: 11, fill: palette.tick }}
+                    stroke={palette.axis}
                     width={34}
                   />
                   <Tooltip
                     labelFormatter={(t) => formatDate(t)}
                     formatter={(value) => [value?.toFixed(3), 'NDVI']}
-                    contentStyle={{ borderRadius: 10, border: '1px solid #eee', fontSize: 13 }}
+                    {...tooltipSkin(palette)}
                   />
                   <Line
                     dataKey="v"
-                    stroke="#2f6b2a"
+                    stroke={palette.series}
                     strokeWidth={1.8}
                     dot={false}
                     connectNulls
@@ -229,7 +232,7 @@ export default function Analytics({ summary, onOpenField }) {
                 Доля дней периода по глубине отклонения от нормы поля.
               </p>
               <div className="zones">
-                <Donut parts={stats.zones} />
+                <Donut parts={stats.zones} track={palette.track} />
                 <div className="zone-legend">
                   {stats.zones.map((zone) => (
                     <div key={zone.key} className="zone-row">
@@ -248,6 +251,27 @@ export default function Analytics({ summary, onOpenField }) {
       <Compare analyzed={analyzed} series={series} setSeries={setSeries} loading={loading} setLoading={setLoading} onOpenField={onOpenField} />
     </>
   )
+}
+
+/**
+ * Оформление всплывающей подсказки графика.
+ *
+ * Recharts рисует её своим блоком с прибитым белым фоном и серой рамкой —
+ * в тёмной теме это белый прямоугольник посреди тёмного экрана. Свои цвета
+ * задаются только через настройки в JSX, классом до них не добраться.
+ */
+function tooltipSkin(palette) {
+  return {
+    contentStyle: {
+      background: palette.card,
+      border: `1px solid ${palette.line}`,
+      borderRadius: 10,
+      fontSize: 13,
+      color: palette.ink,
+    },
+    labelStyle: { color: palette.ink },
+    itemStyle: { color: palette.ink },
+  }
 }
 
 /** Карточка показателя: подпись, число, строка изменения и мини-график. */
@@ -303,13 +327,13 @@ function Bars({ values, color }) {
 }
 
 /** Кольцевая диаграмма долей. Дуги рисуются штрихом по одной окружности. */
-function Donut({ parts }) {
+function Donut({ parts, track }) {
   const R = 52
   const C = 2 * Math.PI * R
   let offset = 0
   return (
     <svg className="donut" viewBox="0 0 140 140">
-      <circle cx="70" cy="70" r={R} fill="none" stroke="#ececec" strokeWidth="26" />
+      <circle cx="70" cy="70" r={R} fill="none" stroke={track} strokeWidth="26" />
       {parts.map((part) => {
         const len = (part.share / 100) * C
         const dash = `${len} ${C - len}`
@@ -336,6 +360,8 @@ function Donut({ parts }) {
 
 /** Сравнение полей: восстановленные ряды нескольких полей на одной шкале. */
 function Compare({ analyzed, series, setSeries, loading, setLoading, onOpenField }) {
+  const palette = usePalette()
+  const LINES = palette.compare
   const [picked, setPicked] = useState([])
 
   useEffect(() => {
@@ -407,7 +433,7 @@ function Compare({ analyzed, series, setSeries, loading, setLoading, onOpenField
       {chart.rows.length > 0 && (
         <ResponsiveContainer width="100%" height={320}>
           <LineChart data={chart.rows} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
-            <CartesianGrid stroke="#eee" vertical={false} />
+            <CartesianGrid stroke={palette.grid} vertical={false} />
             <XAxis
               dataKey="t"
               type="number"
@@ -415,24 +441,24 @@ function Compare({ analyzed, series, setSeries, loading, setLoading, onOpenField
               domain={['dataMin', 'dataMax']}
               tickFormatter={(t) =>
                 new Date(t).toLocaleDateString('ru-RU', { month: 'short', year: '2-digit' })}
-              tick={{ fontSize: 11, fill: '#6f6f6f' }}
-              stroke="#ddd"
+              tick={{ fontSize: 11, fill: palette.tick }}
+              stroke={palette.axis}
               minTickGap={40}
             />
             <YAxis
               domain={[0, 1]}
               allowDataOverflow
               tickFormatter={(v) => v.toFixed(1)}
-              tick={{ fontSize: 11, fill: '#6f6f6f' }}
-              stroke="#ddd"
+              tick={{ fontSize: 11, fill: palette.tick }}
+              stroke={palette.axis}
               width={34}
             />
             <Tooltip
               labelFormatter={(t) => formatDate(t)}
               formatter={(value, name) => [value?.toFixed(3), name]}
-              contentStyle={{ borderRadius: 10, border: '1px solid #eee', fontSize: 13 }}
+              {...tooltipSkin(palette)}
             />
-            <Legend wrapperStyle={{ fontSize: 12.5 }} />
+            <Legend wrapperStyle={{ fontSize: 12.5, color: palette.ink }} />
             {chart.keys.map((key, index) => (
               <Line
                 key={key.id}

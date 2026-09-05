@@ -160,9 +160,12 @@ export default function Fields({ summary, selectedId, onOpen, onRename, onDelete
                     </td>
                     <td className="num">{field.area_ha} га</td>
                     <td>
+                      {/* Оттенок плашки задаётся классом, а не атрибутом style:
+                          цвет из словаря состояний рассчитан на контур поверх
+                          спутникового снимка, а здесь нужен другой — читаемый
+                          на бледной подложке и в светлой теме, и в тёмной. */}
                       <span
-                        className="status"
-                        style={{ background: tone.fill, color: tone.color }}
+                        className={`status st-${state}`}
                         title={stateHint(field, state)}
                       >
                         {tone.label}

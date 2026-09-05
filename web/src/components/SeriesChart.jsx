@@ -13,6 +13,7 @@ import {
 } from 'recharts'
 
 import { CAUSE, SENSOR, SEVERITY, formatDate } from '../dict.js'
+import { usePalette } from '../theme.js'
 
 // Физический диапазон NDVI для растительности.
 const NDVI_MIN = 0
@@ -34,6 +35,10 @@ const SEASON = [4, 10]
  * наблюдения — точки, восстановление — сплошная линия.
  */
 export default function SeriesChart({ series, anomalies, activeAnomaly, onPickAnomaly }) {
+  // Цвета осей, сетки и самого ряда зависят от темы, а задаются атрибутами
+  // SVG — переменная CSS туда не подставляется, поэтому значения читаются из
+  // тех же переменных заранее (см. src/theme.js).
+  const palette = usePalette()
   const data = useMemo(
     () =>
       series.map((point) => {
@@ -76,24 +81,24 @@ export default function SeriesChart({ series, anomalies, activeAnomaly, onPickAn
     <div className="card">
       <h3>Вегетационный индекс NDVI</h3>
       <div className="legend">
-        <span><i className="dotmark" style={{ background: '#101010' }} /> наблюдения со снимков</span>
-        <span><i style={{ borderTopColor: '#2f6b2a' }} /> восстановленный ряд</span>
-        {hasBand && <span><i className="band" style={{ background: 'rgba(47,107,42,0.16)' }} /> норма ±2σ, апрель—октябрь</span>}
-        <span><i className="band" style={{ background: SEVERITY.suppression.soft }} /> угнетение</span>
-        <span><i className="band" style={{ background: SEVERITY.critical.soft }} /> критическая аномалия</span>
+        <span><i className="dotmark" style={{ background: palette.observed }} /> наблюдения со снимков</span>
+        <span><i style={{ borderTopColor: palette.series }} /> восстановленный ряд</span>
+        {hasBand && <span><i className="band" style={{ background: palette.band, opacity: 0.4 }} /> норма ±2σ, апрель—октябрь</span>}
+        <span><i className="band" style={{ background: palette.suppression, opacity: 0.3 }} /> угнетение</span>
+        <span><i className="band" style={{ background: palette.critical, opacity: 0.3 }} /> критическая аномалия</span>
       </div>
 
       <ResponsiveContainer width="100%" height={320}>
         <ComposedChart data={data} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
-          <CartesianGrid stroke="#eeeeee" vertical={false} />
+          <CartesianGrid stroke={palette.grid} vertical={false} />
           <XAxis
             dataKey="t"
             type="number"
             scale="time"
             domain={['dataMin', 'dataMax']}
             tickFormatter={(t) => new Date(t).toLocaleDateString('ru-RU', { month: 'short', year: '2-digit' })}
-            tick={{ fontSize: 11, fill: '#6f6f6f' }}
-            stroke="#dddddd"
+            tick={{ fontSize: 11, fill: palette.tick }}
+            stroke={palette.axis}
             minTickGap={40}
           />
           <YAxis
@@ -102,24 +107,27 @@ export default function SeriesChart({ series, anomalies, activeAnomaly, onPickAn
             // пределы, и на оси появляются подписи вроде 1,49 и −0,000006.
             allowDataOverflow
             tickFormatter={(v) => v.toFixed(1)}
-            tick={{ fontSize: 11, fill: '#6f6f6f' }}
-            stroke="#dddddd"
+            tick={{ fontSize: 11, fill: palette.tick }}
+            stroke={palette.axis}
             tickCount={6}
             width={34}
           />
 
           {/* Периоды рисуются под рядом, чтобы не закрывать его. */}
           {anomalies.map((a, index) => {
-            const tone = SEVERITY[a.severity] || SEVERITY.suppression
+            // Цвет периода берётся из палитры темы по классу аномалии:
+            // в тёмной теме те же классы окрашены светлее, иначе заливка
+            // на тёмном графике не видна вовсе.
+            const color = a.severity === 'critical' ? palette.critical : palette.suppression
             const active = activeAnomaly === index
             return (
               <ReferenceArea
                 key={`${a.start}-${a.end}`}
                 x1={Date.parse(a.start)}
                 x2={Date.parse(a.end)}
-                fill={tone.color}
-                fillOpacity={active ? 0.3 : 0.14}
-                stroke={active ? tone.color : 'none'}
+                fill={color}
+                fillOpacity={active ? 0.3 : 0.16}
+                stroke={active ? color : 'none'}
                 strokeOpacity={0.8}
                 onClick={() => onPickAnomaly?.(index)}
                 style={{ cursor: 'pointer' }}
@@ -131,8 +139,8 @@ export default function SeriesChart({ series, anomalies, activeAnomaly, onPickAn
             <Area
               dataKey="band"
               stroke="none"
-              fill="#2f6b2a"
-              fillOpacity={0.13}
+              fill={palette.band}
+              fillOpacity={0.18}
               isAnimationActive={false}
               connectNulls={false}
             />
@@ -140,7 +148,7 @@ export default function SeriesChart({ series, anomalies, activeAnomaly, onPickAn
 
           <Line
             dataKey="restored"
-            stroke="#2f6b2a"
+            stroke={palette.series}
             strokeWidth={1.8}
             dot={false}
             isAnimationActive={false}
@@ -152,7 +160,7 @@ export default function SeriesChart({ series, anomalies, activeAnomaly, onPickAn
           <Scatter
             data={observedPoints}
             dataKey="observed"
-            fill="#101010"
+            fill={palette.observed}
             shape="circle"
             isAnimationActive={false}
           />
@@ -171,7 +179,7 @@ function SeriesTooltip({ active, payload, anomalies }) {
     (a) => point.t >= Date.parse(a.start) && point.t <= Date.parse(a.end),
   )
   return (
-    <div className="card" style={{ margin: 0, padding: '9px 12px', boxShadow: '0 4px 16px rgba(0,0,0,.1)' }}>
+    <div className="card" style={{ margin: 0, padding: '9px 12px' }}>
       <div style={{ fontWeight: 600 }}>{formatDate(point.t)}</div>
       <div className="small">
         {point.observed != null ? (
@@ -185,7 +193,12 @@ function SeriesTooltip({ active, payload, anomalies }) {
         <div className="small">отклонение от нормы {point.zscore.toFixed(2)} σ</div>
       )}
       {inside && (
-        <div className="small" style={{ marginTop: 4, color: (SEVERITY[inside.severity] || {}).color }}>
+        // Класс аномалии словом и цветом. Цвет — переменной темы, а не из
+        // словаря: в тёмной теме тёмно-красный на тёмной карточке пропадает.
+        <div
+          className={`small text-${inside.severity === 'critical' ? 'critical' : 'suppression'}`}
+          style={{ marginTop: 4 }}
+        >
           {(SEVERITY[inside.severity] || {}).label} · {CAUSE[inside.cause] || inside.cause}
         </div>
       )}

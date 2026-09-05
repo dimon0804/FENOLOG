@@ -4,6 +4,7 @@ import { AttributionControl, Map as MapLibreMap, Popup, setWorkerUrl } from 'map
 import 'maplibre-gl/dist/maplibre-gl.css'
 
 import { FIELD_STATE, FIELD_STATE_ORDER, REGION_PRESETS, cropTitle } from '../dict.js'
+import { useTheme } from '../theme.js'
 import {
   IconBack,
   IconCheck,
@@ -52,8 +53,19 @@ const BASEMAPS = {
   },
 }
 
-function styleFor(kind) {
+/**
+ * Стиль карты для выбранной подложки.
+ *
+ * Снимок от темы не зависит: поле на нём выглядит полем при любом оформлении,
+ * и перекрашивать реальность было бы враньём. А вот схема OpenStreetMap
+ * нарисована для светлого экрана — её белая заливка в тёмной теме светится
+ * ярче всего остального интерфейса вместе взятого. Своих цветов у чужих
+ * растровых тайлов нет, поэтому подложка приглушается средствами самой карты:
+ * потолок яркости, чуть меньше насыщенности и контраста.
+ */
+function styleFor(kind, theme = 'light') {
   const base = BASEMAPS[kind]
+  const dim = kind === 'osm' && theme === 'dark'
   return {
     version: 8,
     sources: {
@@ -65,7 +77,16 @@ function styleFor(kind) {
         attribution: base.attribution,
       },
     },
-    layers: [{ id: 'base', type: 'raster', source: 'base' }],
+    layers: [
+      {
+        id: 'base',
+        type: 'raster',
+        source: 'base',
+        paint: dim
+          ? { 'raster-brightness-max': 0.68, 'raster-saturation': -0.2, 'raster-contrast': -0.08 }
+          : {},
+      },
+    ],
   }
 }
 
@@ -157,6 +178,11 @@ export default function MapPanel({
   const popup = useRef(null)
   const [ready, setReady] = useState(false)
   const [basemap, setBasemap] = useState('satellite')
+  const { theme } = useTheme()
+  // Тема важна только схеме: на снимке менять нечего, и пересобирать из-за
+  // переключения темы стиль карты со спутником значило бы моргать подложкой
+  // на ровном месте.
+  const basemapTone = basemap === 'osm' ? theme : 'light'
   const [scale, setScale] = useState(null)
   const [drawing, setDrawing] = useState(false)
   // Точки рисуемого контура держим в ref, а не только в состоянии: обработчик
@@ -215,9 +241,9 @@ export default function MapPanel({
   // Смена подложки пересоздаёт стиль, поэтому слои данных нужно вернуть обратно.
   useEffect(() => {
     if (!map.current || !ready) return
-    map.current.setStyle(styleFor(basemap))
+    map.current.setStyle(styleFor(basemap, basemapTone))
     map.current.once('styledata', () => addLayers(map.current))
-  }, [basemap, ready])
+  }, [basemap, basemapTone, ready])
 
   function addLayers(instance) {
     // Источники создаются сразу с актуальными данными, а не пустыми.

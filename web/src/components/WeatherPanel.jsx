@@ -11,7 +11,8 @@ import {
   YAxis,
 } from 'recharts'
 
-import { SEVERITY, formatDate } from '../dict.js'
+import { formatDate } from '../dict.js'
+import { usePalette } from '../theme.js'
 
 // Суточные значения за пять сезонов — это полторы тысячи столбиков шириной в
 // пиксель, из которых ничего не прочитать. Сворачиваем в декады: осадки
@@ -26,6 +27,7 @@ const BUCKET_DAYS = 10
  * должна проверяться взглядом на тот же интервал времени.
  */
 export default function WeatherPanel({ weather, anomalies, activeAnomaly }) {
+  const palette = usePalette()
   const data = useMemo(() => aggregate(weather), [weather])
   if (!data.length) return null
 
@@ -33,53 +35,53 @@ export default function WeatherPanel({ weather, anomalies, activeAnomaly }) {
     <div className="card">
       <h3>Погода по центроиду поля</h3>
       <div className="legend">
-        <span><i className="band" style={{ background: '#7aa8d1' }} /> осадки за декаду, мм</span>
-        <span><i style={{ borderTopColor: '#c0653a' }} /> средняя температура, °C</span>
+        <span><i className="band" style={{ background: palette.rain }} /> осадки за декаду, мм</span>
+        <span><i style={{ borderTopColor: palette.temp }} /> средняя температура, °C</span>
       </div>
       <ResponsiveContainer width="100%" height={170}>
         <ComposedChart data={data} margin={{ top: 6, right: 12, bottom: 4, left: -18 }}>
-          <CartesianGrid stroke="#eeeeee" vertical={false} />
+          <CartesianGrid stroke={palette.grid} vertical={false} />
           <XAxis
             dataKey="t"
             type="number"
             scale="time"
             domain={['dataMin', 'dataMax']}
             tickFormatter={(t) => new Date(t).toLocaleDateString('ru-RU', { month: 'short', year: '2-digit' })}
-            tick={{ fontSize: 11, fill: '#6f6f6f' }}
-            stroke="#dddddd"
+            tick={{ fontSize: 11, fill: palette.tick }}
+            stroke={palette.axis}
             minTickGap={40}
           />
           {/* Ширина оси считается под три знака: за декаду в ливень набегает
               больше сотни миллиметров, и на 38 пикселях у «140» отрезало
               первую цифру — подпись превращалась в «40». */}
-          <YAxis yAxisId="precip" tick={{ fontSize: 11, fill: '#6f6f6f' }} stroke="#dddddd" width={46} />
+          <YAxis yAxisId="precip" tick={{ fontSize: 11, fill: palette.tick }} stroke={palette.axis} width={46} />
           <YAxis
             yAxisId="temp"
             orientation="right"
-            tick={{ fontSize: 11, fill: '#6f6f6f' }}
-            stroke="#dddddd"
+            tick={{ fontSize: 11, fill: palette.tick }}
+            stroke={palette.axis}
             width={40}
           />
 
           {anomalies.map((a, index) => {
-            const tone = SEVERITY[a.severity] || SEVERITY.suppression
+            const color = a.severity === 'critical' ? palette.critical : palette.suppression
             return (
               <ReferenceArea
                 key={`${a.start}-${a.end}`}
                 yAxisId="precip"
                 x1={Date.parse(a.start)}
                 x2={Date.parse(a.end)}
-                fill={tone.color}
-                fillOpacity={activeAnomaly === index ? 0.26 : 0.1}
+                fill={color}
+                fillOpacity={activeAnomaly === index ? 0.26 : 0.12}
               />
             )
           })}
 
-          <Bar yAxisId="precip" dataKey="precip" fill="#7aa8d1" isAnimationActive={false} />
+          <Bar yAxisId="precip" dataKey="precip" fill={palette.rain} isAnimationActive={false} />
           <Line
             yAxisId="temp"
             dataKey="temp"
-            stroke="#c0653a"
+            stroke={palette.temp}
             strokeWidth={1.4}
             dot={false}
             isAnimationActive={false}

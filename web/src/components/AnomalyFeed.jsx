@@ -38,10 +38,10 @@ export default function AnomalyFeed({ anomalies, active, onPick, climatologySour
               <span className="dates">
                 {formatDate(anomaly.start)} — {formatDate(anomaly.end)}
               </span>
-              <span
-                className="tag"
-                style={{ background: tone.soft, color: tone.color }}
-              >
+              {/* Оттенок плашки — классом: тёмно-красная надпись на бледно-розовой
+                  подложке в тёмной теме нечитаема, и подобрать её обязана тема,
+                  а не словарь классов аномалий. */}
+              <span className={`tag tone-${SEVERITY[anomaly.severity] ? anomaly.severity : 'suppression'}`}>
                 {tone.label}
               </span>
             </div>

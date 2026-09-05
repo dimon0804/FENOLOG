@@ -42,13 +42,16 @@ export default function FieldPanel({
           </div>
         </div>
 
-        <div className="row">
+        {/* Кнопки запуска переносятся: на узком экране поле ввода имени и две
+            кнопки в одну строку не встают, а обрезать их нельзя — это
+            единственный способ запустить разбор. */}
+        <div className="row wrap">
           {draft && (
             <>
               <input
                 type="text"
                 className="field"
-                style={{ width: 200 }}
+                style={{ width: 200, maxWidth: '100%' }}
                 placeholder="название поля"
                 value={draft.name}
                 onChange={(event) => onDraftName(event.target.value)}

@@ -19,19 +19,57 @@
   --nav-line: #2a2a2a;
   --nav-text: #ffffff;
   --nav-muted: #8d8d8d;
+  --nav-hover: #1a1a1a;
+  --nav-foot-hover: #242424;
+  --nav-menu: #303030;
+  --nav-menu-line: #454545;
+  --nav-btn: #444444;
+  --nav-btn-hover: #4f4f4f;
+  --nav-down: #f0a49c;
+  --nav-active-a: #2f6b2a;
+  --nav-active-b: #6aa84f;
 
   /* рабочее поле */
   --page: #f1f1f1;
   --canvas: #fbfbfb;
   --card: #ffffff;
+  --card-hover: #fbfbfb;
   --line: #e6e6e6;
   --ink: #101010;
-  --ink-soft: #6f6f6f;
+  /* Чуть темнее прежнего #6f6f6f: на сером фоне страницы тот давал контраст
+     4,45 — подзаголовок раздела не дотягивал до нормы на самом видном месте. */
+  --ink-soft: #6a6a6a;
+
+  /* Служебные подложки: наведение, чередование, разделители. Держатся
+     отдельными переменными, а не литералами по месту, потому что в тёмной теме
+     они меняются не как основной фон: там подсветка строки светлее фона, а не
+     темнее, и «просто инвертировать» её нельзя. */
+  --surface: #f5f5f5;
+  --surface-2: #f4f4f4;
+  --hover: #efefef;
+  --hover-strong: #e2e2e2;
+  --row-hover: #fafafa;
+  --row-hover-2: #ededed;
+  --divider: #dedede;
+  --table-divider: #111111;
+  --track: #e6e6e6;
+  --donut-track: #ececec;
+  --thumb: #dcdcdc;
+  --thumb-a: #e2e2e2;
+  --thumb-b: #d8d8d8;
 
   /* акценты по смыслу */
   --green: #4e9b36;
   --green-deep: #2f6b2a;
   --green-soft: #eaf3e6;
+  --green-hover: #43862f;
+  /* Надпись на зелёной кнопке. В светлой теме белая, в тёмной — почти чёрная:
+     зелёный там заметно светлее, и белым по нему контраст падает до 2,3. */
+  --on-green: #ffffff;
+  /* Зелёный как цвет надписи на светлом фоне. Фирменный #4e9b36 на белой
+     карточке даёт контраст 3,5 — для строки в тринадцать пунктов мало, а
+     заливкой он при этом остаётся прежним. */
+  --green-text: #3d8129;
   --purple: #8b2fe8;
   --purple-soft: #f2e9fd;
   --blue: #1f34d4;
@@ -40,13 +78,319 @@
   /* классы состояния растительности */
   --critical: #d4342a;
   --critical-soft: #fbe9e7;
+  --critical-line: #eab3ad;
+  --critical-ink: #8a2118;
   --suppression: #e08a20;
   --suppression-soft: #fdf2e2;
+  --suppression-line: #e8cd97;
+  --suppression-ink: #7a5410;
+
+  /* Плашка состояния поля в списке: подложка и надпись на ней.
+     Цвет надписи отдельный, а не тот же, что у точки на карте: насыщенный
+     зелёный на бледно-зелёной подложке даёт контраст 1,8 — читать нечем. */
+  --st-ok-bg: #e3f5e7;
+  --st-ok-ink: #176c3a;
+  --st-watch-bg: #fdf1dc;
+  --st-watch-ink: #855605;
+  --st-bad-bg: #fce9e7;
+  --st-bad-ink: #a3231a;
+  --st-nodata-bg: #eceff1;
+  --st-nodata-ink: #55626b;
+
+  --dot-ok: #57c05a;
+  --dot-idle: #c2c2c2;
+
+  /* быстрый старт: зелёный градиент из макета */
+  --quick-a: #dde9d6;
+  --quick-b: #b7d7a4;
+  --quick-c: #8fc175;
+  --quick-ink: #1f4a1c;
+  --quick-ink-soft: #33502c;
+  --quick-btn: #3f7530;
+  --quick-btn-hover: #35642a;
+
+  /* Плашки поверх карты. Подложка снимка от темы не зависит, поэтому подсказка
+     у кнопок остаётся тёмной в обеих темах — она читается на спутнике. */
+  --overlay: rgba(255, 255, 255, 0.96);
+  --attrib: rgba(255, 255, 255, 0.8);
+  --tip: rgba(16, 16, 16, 0.9);
+  --tip-ink: #ffffff;
+
+  /* Стрелка выпадающего списка нарисована фоном, и цвет обводки вшит в саму
+     картинку — переменной внутри url() не обойтись, поэтому переменных две. */
+  --arrow-ink: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23101010' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9.5 12 15.5 18 9.5'/%3E%3C/svg%3E");
+  --arrow-soft: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%236f6f6f' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 6l5 5 5-5'/%3E%3C/svg%3E");
+
+  --shadow: 0 1px 2px rgba(16, 16, 16, 0.04), 0 6px 22px rgba(16, 16, 16, 0.06);
+  --shadow-pop: 0 8px 34px rgba(16, 16, 16, 0.16);
+  --shadow-float: 0 2px 6px rgba(16, 16, 16, 0.12), 0 10px 28px rgba(16, 16, 16, 0.14);
+  --shadow-menu: 0 10px 30px rgba(0, 0, 0, 0.45);
+
+  /* Графики. Recharts красит оси и сетку атрибутами SVG, переменная туда не
+     подставится — значения читает src/theme.js и передаёт в JSX уже строкой. */
+  --chart-grid: #eeeeee;
+  --chart-axis: #dddddd;
+  --chart-tick: #6f6f6f;
+  --chart-line: #2f6b2a;
+  --chart-band: #2f6b2a;
+  --chart-dot: #101010;
+  --chart-rain: #7aa8d1;
+  --chart-temp: #c0653a;
+  --chart-compare: #2f6b2a, #1f34d4, #8b2fe8, #c46a12, #0f8f8f;
 
   --radius: 18px;
   --radius-sm: 10px;
-  --shadow: 0 1px 2px rgba(16, 16, 16, 0.04), 0 6px 22px rgba(16, 16, 16, 0.06);
   --nav-width: 292px;
+}
+
+/* Тёмная тема.
+ *
+ * Задаётся атрибутом на корне документа (его ставит встроенный скрипт в
+ * index.html ещё до первой отрисовки) и, отдельно, системной настройкой —
+ * когда пользователь выбрал режим «как в системе» и атрибута нет вовсе.
+ * Условие `:not([data-theme='light'])` во втором блоке обязательно: без него
+ * явно выбранная светлая тема ломалась бы на машине с тёмной системой. */
+
+[data-theme='dark'] {
+  /* Колонка в тёмной теме почти сливается с фоном страницы: разделяет их
+     не цвет, а граница. Оставлять её чёрной на тёмно-зелёном фоне нельзя —
+     колонка читалась бы как дыра в экране. */
+  --nav: #070b07;
+  --nav-card: #121812;
+  --nav-line: #273126;
+  --nav-text: #eef4ec;
+  --nav-muted: #93a390;
+  --nav-hover: #151d14;
+  --nav-foot-hover: #1c261b;
+  --nav-menu: #1f291e;
+  --nav-menu-line: #34402f;
+  --nav-btn: #2c382a;
+  --nav-btn-hover: #374535;
+  --nav-down: #ff9d92;
+  --nav-active-a: #2f6b2a;
+  --nav-active-b: #6aa84f;
+
+  /* Фон не чёрный, а очень тёмный с уходом в зелёный: фирменный цвет сервиса
+     зелёный, и нейтрально-серая тёмная тема выглядела бы чужой. Разница между
+     страницей, панелью и карточкой держится небольшой — три ступени по
+     светлоте, иначе карточки начинают светиться. */
+  --page: #0b0f0a;
+  --canvas: #10160f;
+  --card: #161e15;
+  --card-hover: #1c261b;
+  --line: #2b352a;
+  --ink: #e9f0e6;
+  /* Приглушённая подпись: на #161e15 контраст 6,9 — мелкий серый текст в
+     тёмной теме проваливается первым, поэтому он заметно светлее фона. */
+  --ink-soft: #a3b3a0;
+
+  --surface: #141b13;
+  --surface-2: #131a12;
+  --hover: #1e281d;
+  --hover-strong: #293327;
+  --row-hover: #1b241a;
+  --row-hover-2: #212b20;
+  --divider: #273126;
+  --table-divider: #2e3a2d;
+  --track: #273126;
+  --donut-track: #242e23;
+  --thumb: #20291f;
+  --thumb-a: #232c22;
+  --thumb-b: #1b231a;
+
+  /* Акценты подняты по светлоте: #4e9b36 на тёмном фоне даёт контраст 3,3 и
+     для подписей не годится. Смысл цветов при этом не меняется. */
+  --green: #6bbf4f;
+  --green-deep: #3f8a33;
+  --green-soft: rgba(107, 191, 79, 0.18);
+  --green-hover: #7ccc5f;
+  --on-green: #08150a;
+  /* В тёмной теме зелёный и так поднят по светлоте — отдельный оттенок
+     для надписей не нужен. */
+  --green-text: #6bbf4f;
+  --purple: #b98cff;
+  --purple-soft: rgba(185, 140, 255, 0.18);
+  --blue: #7c8cff;
+  --blue-soft: rgba(124, 140, 255, 0.18);
+
+  --critical: #ff6b5e;
+  --critical-soft: rgba(255, 107, 94, 0.16);
+  --critical-line: rgba(255, 107, 94, 0.42);
+  --critical-ink: #ff9c92;
+  --suppression: #f0a93a;
+  --suppression-soft: rgba(240, 169, 58, 0.16);
+  --suppression-line: rgba(240, 169, 58, 0.42);
+  --suppression-ink: #f3c264;
+
+  --st-ok-bg: rgba(34, 197, 94, 0.18);
+  --st-ok-ink: #6ee79f;
+  --st-watch-bg: rgba(240, 169, 27, 0.18);
+  --st-watch-ink: #f5c261;
+  --st-bad-bg: rgba(229, 53, 43, 0.20);
+  --st-bad-ink: #ff8f84;
+  --st-nodata-bg: rgba(170, 178, 186, 0.16);
+  --st-nodata-ink: #b7c2ba;
+
+  --dot-ok: #57c05a;
+  --dot-idle: #5d6b5b;
+
+  /* Градиент быстрого старта уходит в тёмную зелень, а надписи на нём —
+     светлые. Светлый градиент из макета в тёмной теме бил бы по глазам
+     сильнее всего остального экрана вместе взятого. */
+  --quick-a: #1a2a17;
+  --quick-b: #24401f;
+  --quick-c: #2f5528;
+  --quick-ink: #d3e8c8;
+  --quick-ink-soft: #aac89f;
+  --quick-btn: #4e9b36;
+  --quick-btn-hover: #5aad3f;
+
+  --overlay: rgba(16, 22, 15, 0.94);
+  --attrib: rgba(16, 22, 15, 0.78);
+  --tip: rgba(8, 12, 8, 0.92);
+  --tip-ink: #ffffff;
+
+  --arrow-ink: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23e9f0e6' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9.5 12 15.5 18 9.5'/%3E%3C/svg%3E");
+  --arrow-soft: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23a3b3a0' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 6l5 5 5-5'/%3E%3C/svg%3E");
+
+  /* Тени на тёмном фоне почти не видны, поэтому они плотнее: иначе карточки
+     теряют края и экран превращается в однородное пятно. */
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 6px 22px rgba(0, 0, 0, 0.38);
+  --shadow-pop: 0 8px 34px rgba(0, 0, 0, 0.55);
+  --shadow-float: 0 2px 6px rgba(0, 0, 0, 0.45), 0 10px 28px rgba(0, 0, 0, 0.45);
+  --shadow-menu: 0 10px 30px rgba(0, 0, 0, 0.6);
+
+  --chart-grid: #273126;
+  --chart-axis: #3a473a;
+  --chart-tick: #a3b3a0;
+  --chart-line: #6bbf4f;
+  --chart-band: #37742c;
+  --chart-dot: #e9f0e6;
+  --chart-rain: #6f9fd8;
+  --chart-temp: #e08a5a;
+  --chart-compare: #6bbf4f, #7c8cff, #c08cff, #e0a24a, #4fc9c9;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+  /* Колонка в тёмной теме почти сливается с фоном страницы: разделяет их
+     не цвет, а граница. Оставлять её чёрной на тёмно-зелёном фоне нельзя —
+     колонка читалась бы как дыра в экране. */
+  --nav: #070b07;
+  --nav-card: #121812;
+  --nav-line: #273126;
+  --nav-text: #eef4ec;
+  --nav-muted: #93a390;
+  --nav-hover: #151d14;
+  --nav-foot-hover: #1c261b;
+  --nav-menu: #1f291e;
+  --nav-menu-line: #34402f;
+  --nav-btn: #2c382a;
+  --nav-btn-hover: #374535;
+  --nav-down: #ff9d92;
+  --nav-active-a: #2f6b2a;
+  --nav-active-b: #6aa84f;
+
+  /* Фон не чёрный, а очень тёмный с уходом в зелёный: фирменный цвет сервиса
+     зелёный, и нейтрально-серая тёмная тема выглядела бы чужой. Разница между
+     страницей, панелью и карточкой держится небольшой — три ступени по
+     светлоте, иначе карточки начинают светиться. */
+  --page: #0b0f0a;
+  --canvas: #10160f;
+  --card: #161e15;
+  --card-hover: #1c261b;
+  --line: #2b352a;
+  --ink: #e9f0e6;
+  /* Приглушённая подпись: на #161e15 контраст 6,9 — мелкий серый текст в
+     тёмной теме проваливается первым, поэтому он заметно светлее фона. */
+  --ink-soft: #a3b3a0;
+
+  --surface: #141b13;
+  --surface-2: #131a12;
+  --hover: #1e281d;
+  --hover-strong: #293327;
+  --row-hover: #1b241a;
+  --row-hover-2: #212b20;
+  --divider: #273126;
+  --table-divider: #2e3a2d;
+  --track: #273126;
+  --donut-track: #242e23;
+  --thumb: #20291f;
+  --thumb-a: #232c22;
+  --thumb-b: #1b231a;
+
+  /* Акценты подняты по светлоте: #4e9b36 на тёмном фоне даёт контраст 3,3 и
+     для подписей не годится. Смысл цветов при этом не меняется. */
+  --green: #6bbf4f;
+  --green-deep: #3f8a33;
+  --green-soft: rgba(107, 191, 79, 0.18);
+  --green-hover: #7ccc5f;
+  --on-green: #08150a;
+  /* В тёмной теме зелёный и так поднят по светлоте — отдельный оттенок
+     для надписей не нужен. */
+  --green-text: #6bbf4f;
+  --purple: #b98cff;
+  --purple-soft: rgba(185, 140, 255, 0.18);
+  --blue: #7c8cff;
+  --blue-soft: rgba(124, 140, 255, 0.18);
+
+  --critical: #ff6b5e;
+  --critical-soft: rgba(255, 107, 94, 0.16);
+  --critical-line: rgba(255, 107, 94, 0.42);
+  --critical-ink: #ff9c92;
+  --suppression: #f0a93a;
+  --suppression-soft: rgba(240, 169, 58, 0.16);
+  --suppression-line: rgba(240, 169, 58, 0.42);
+  --suppression-ink: #f3c264;
+
+  --st-ok-bg: rgba(34, 197, 94, 0.18);
+  --st-ok-ink: #6ee79f;
+  --st-watch-bg: rgba(240, 169, 27, 0.18);
+  --st-watch-ink: #f5c261;
+  --st-bad-bg: rgba(229, 53, 43, 0.20);
+  --st-bad-ink: #ff8f84;
+  --st-nodata-bg: rgba(170, 178, 186, 0.16);
+  --st-nodata-ink: #b7c2ba;
+
+  --dot-ok: #57c05a;
+  --dot-idle: #5d6b5b;
+
+  /* Градиент быстрого старта уходит в тёмную зелень, а надписи на нём —
+     светлые. Светлый градиент из макета в тёмной теме бил бы по глазам
+     сильнее всего остального экрана вместе взятого. */
+  --quick-a: #1a2a17;
+  --quick-b: #24401f;
+  --quick-c: #2f5528;
+  --quick-ink: #d3e8c8;
+  --quick-ink-soft: #aac89f;
+  --quick-btn: #4e9b36;
+  --quick-btn-hover: #5aad3f;
+
+  --overlay: rgba(16, 22, 15, 0.94);
+  --attrib: rgba(16, 22, 15, 0.78);
+  --tip: rgba(8, 12, 8, 0.92);
+  --tip-ink: #ffffff;
+
+  --arrow-ink: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23e9f0e6' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9.5 12 15.5 18 9.5'/%3E%3C/svg%3E");
+  --arrow-soft: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23a3b3a0' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 6l5 5 5-5'/%3E%3C/svg%3E");
+
+  /* Тени на тёмном фоне почти не видны, поэтому они плотнее: иначе карточки
+     теряют края и экран превращается в однородное пятно. */
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 6px 22px rgba(0, 0, 0, 0.38);
+  --shadow-pop: 0 8px 34px rgba(0, 0, 0, 0.55);
+  --shadow-float: 0 2px 6px rgba(0, 0, 0, 0.45), 0 10px 28px rgba(0, 0, 0, 0.45);
+  --shadow-menu: 0 10px 30px rgba(0, 0, 0, 0.6);
+
+  --chart-grid: #273126;
+  --chart-axis: #3a473a;
+  --chart-tick: #a3b3a0;
+  --chart-line: #6bbf4f;
+  --chart-band: #37742c;
+  --chart-dot: #e9f0e6;
+  --chart-rain: #6f9fd8;
+  --chart-temp: #e08a5a;
+  --chart-compare: #6bbf4f, #7c8cff, #c08cff, #e0a24a, #4fc9c9;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -148,9 +492,9 @@ input { font: inherit; }
   text-align: left;
   transition: background 0.15s;
 }
-.nav-item:hover { background: #1a1a1a; }
+.nav-item:hover { background: var(--nav-hover); }
 .nav-item.active {
-  background: linear-gradient(90deg, var(--green-deep) 0%, #6aa84f 100%);
+  background: linear-gradient(90deg, var(--nav-active-a) 0%, var(--nav-active-b) 100%);
   font-weight: 600;
 }
 .nav-item svg { flex: none; }
@@ -193,13 +537,13 @@ input { font: inherit; }
 .source-row:first-of-type { border-top: 0; }
 .source-row .name { font-size: 13px; color: var(--nav-text); }
 .source-row .when { font-size: 10.5px; color: var(--nav-muted); }
-.source-row.down .name { color: #f0a49c; }
+.source-row.down .name { color: var(--nav-down); }
 /* Последствие отказа: показывается только под упавшим источником, поэтому
    в обычном состоянии панель не растёт и выглядит как раньше. */
 .source-row .consequence {
   font-size: 10.5px;
   line-height: 1.35;
-  color: #f0a49c;
+  color: var(--nav-down);
   margin-top: 3px;
   opacity: 0.85;
 }
@@ -234,12 +578,12 @@ input { font: inherit; }
   padding: 11px 13px;
   text-align: left;
 }
-.nav-foot:hover, .nav-foot.open { background: #242424; }
+.nav-foot:hover, .nav-foot.open { background: var(--nav-foot-hover); }
 .nav-foot .mark {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--green-deep), #6aa84f);
+  background: linear-gradient(135deg, var(--nav-active-a), var(--nav-active-b));
   display: grid;
   place-items: center;
   flex: none;
@@ -266,14 +610,14 @@ input { font: inherit; }
   z-index: 40;
   /* Светлее карточки источников, над которой всплывает: на одинаковом фоне
      раскрытое меню читалось как продолжение списка, а не как отдельный слой. */
-  background: #303030;
-  border: 1px solid #454545;
+  background: var(--nav-menu);
+  border: 1px solid var(--nav-menu-line);
   border-radius: 12px;
   padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-menu);
 }
 .nav-menu .muted { color: var(--nav-muted); }
 .nav-menu-row {
@@ -285,8 +629,8 @@ input { font: inherit; }
   color: var(--nav-muted);
 }
 .nav-menu-row b { color: var(--nav-text); font-weight: 600; }
-.nav-menu .btn { background: #444444; color: var(--nav-text); box-shadow: none; justify-content: center; }
-.nav-menu .btn:hover:not(:disabled) { background: #4f4f4f; }
+.nav-menu .btn { background: var(--nav-btn); color: var(--nav-text); box-shadow: none; justify-content: center; }
+.nav-menu .btn:hover:not(:disabled) { background: var(--nav-btn-hover); }
 
 /* ===================================================================== шапка */
 
@@ -324,7 +668,7 @@ input { font: inherit; }
   font-weight: 500;
   white-space: nowrap;
 }
-.pill:hover { background: #fbfbfb; }
+.pill:hover { background: var(--card-hover); }
 .pill.icon-only { padding: 0; width: 44px; justify-content: center; }
 .pill .chev { color: var(--ink-soft); }
 .pill.alert { color: var(--critical); }
@@ -339,10 +683,12 @@ input { font: inherit; }
   width: 340px;
   background: var(--card);
   border-radius: var(--radius);
-  box-shadow: 0 8px 34px rgba(16, 16, 16, 0.16);
+  box-shadow: var(--shadow-pop);
   padding: 16px 18px;
 }
 .popover.left { right: auto; left: 0; }
+.popover.wide { width: 300px; }
+.popover.narrow { width: 260px; }
 .popover h4 { margin: 0 0 10px; font-size: 13px; font-weight: 700; }
 
 .menu-row {
@@ -353,8 +699,13 @@ input { font: inherit; }
   border-radius: var(--radius-sm);
   font-size: 14px;
 }
-.menu-row:hover { background: #f4f4f4; }
+.menu-row:hover { background: var(--hover); }
 .menu-row.active { background: var(--green-soft); font-weight: 600; }
+/* Строка выбора темы: значок слева, название и пояснение справа. Значок
+   выравнивается по верху, а не по центру, — пояснение может занять две
+   строки, и центрированный значок тогда уезжает вниз. */
+.menu-row.theme-row { align-items: flex-start; }
+.menu-row.theme-row svg { flex: none; margin-top: 2px; }
 
 /* ================================================================= карточки */
 
@@ -438,7 +789,7 @@ input { font: inherit; }
   border-radius: var(--radius);
   /* Зелёный градиент снят с макета пипеткой: светлый левый верх, насыщенный
      правый низ. */
-  background: linear-gradient(125deg, #dde9d6 0%, #b7d7a4 52%, #8fc175 100%);
+  background: linear-gradient(125deg, var(--quick-a) 0%, var(--quick-b) 52%, var(--quick-c) 100%);
   padding: 34px 36px;
   display: flex;
   flex-direction: column;
@@ -448,10 +799,10 @@ input { font: inherit; }
   margin: 0 0 8px;
   font-size: 27px;
   font-weight: 800;
-  color: #1f4a1c;
+  color: var(--quick-ink);
   letter-spacing: -0.02em;
 }
-.quickstart p { margin: 0 0 20px; color: #33502c; font-size: 15px; max-width: 420px; }
+.quickstart p { margin: 0 0 20px; color: var(--quick-ink-soft); font-size: 15px; max-width: 420px; }
 
 /* Выбор региона: белая плашка на зелёном, как в макете. Список не зашит —
    за ней открывается тот же поиск по геокодеру, что и в шапке. */
@@ -475,11 +826,11 @@ input { font: inherit; }
 
 /* Кнопка на зелёном фоне темнее обычной первичной: на светло-зелёном
    градиенте штатный --green сливается с подложкой. */
-.btn.go { background: #3f7530; color: #fff; box-shadow: none; height: 46px; padding: 0 22px; }
-.btn.go:hover:not(:disabled) { background: #35642a; }
+.btn.go { background: var(--quick-btn); color: var(--on-green); box-shadow: none; height: 46px; padding: 0 22px; }
+.btn.go:hover:not(:disabled) { background: var(--quick-btn-hover); }
 
 .activity {
-  background: #f5f5f5;
+  background: var(--surface);
   border-radius: var(--radius);
   padding: 28px 30px;
   display: flex;
@@ -500,11 +851,11 @@ input { font: inherit; }
   gap: 12px;
   width: 100%;
   padding: 10px 6px;
-  border-bottom: 1px solid #dedede;
+  border-bottom: 1px solid var(--divider);
   text-align: left;
   border-radius: 8px;
 }
-.activity-row:hover { background: #efefef; }
+.activity-row:hover { background: var(--hover); }
 .activity-row .who { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .activity-row .name {
   font-size: 14.5px;
@@ -531,12 +882,12 @@ input { font: inherit; }
   font-weight: 600;
   white-space: nowrap;
 }
-.btn:hover:not(:disabled) { background: #fbfbfb; }
+.btn:hover:not(:disabled) { background: var(--card-hover); }
 .btn:disabled { opacity: 0.45; cursor: default; }
-.btn.primary { background: var(--green); color: #fff; box-shadow: none; }
-.btn.primary:hover:not(:disabled) { background: #43862f; }
+.btn.primary { background: var(--green); color: var(--on-green); box-shadow: none; }
+.btn.primary:hover:not(:disabled) { background: var(--green-hover); }
 .btn.ghost { box-shadow: none; background: transparent; height: 32px; padding: 0 10px; font-weight: 500; }
-.btn.ghost:hover:not(:disabled) { background: #efefef; }
+.btn.ghost:hover:not(:disabled) { background: var(--hover); }
 .btn.danger { color: var(--critical); }
 .btn.sm { height: 34px; padding: 0 13px; font-size: 13px; }
 /* Ссылка-кнопка: скачивание файла — это <a download>, а не кнопка с fetch,
@@ -607,7 +958,7 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
   color: var(--ink);
   flex: 0 0 auto;
 }
-.map-back:hover { background: #f1f1f1; }
+.map-back:hover { background: var(--hover); }
 
 /* Свой список вместо готового компонента: вариантов восемь, они не ищутся и не
    грузятся — родной select здесь и легче, и правильнее с клавиатуры. Стрелка
@@ -621,7 +972,7 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
   border: 1px solid var(--line);
   border-radius: 12px;
   background-color: var(--card);
-  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23101010' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9.5 12 15.5 18 9.5'/%3E%3C/svg%3E");
+  background-image: var(--arrow-ink);
   background-repeat: no-repeat;
   background-position: right 14px center;
   color: var(--ink);
@@ -648,7 +999,7 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
   z-index: 5;
   background: var(--card);
   border-radius: 16px;
-  box-shadow: 0 2px 6px rgba(16, 16, 16, 0.12), 0 10px 28px rgba(16, 16, 16, 0.14);
+  box-shadow: var(--shadow-float);
   padding: 6px;
   display: flex;
   flex-direction: column;
@@ -664,7 +1015,7 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
   place-items: center;
   color: var(--ink);
 }
-.rail-btn:hover { background: #f1f1f1; }
+.rail-btn:hover { background: var(--hover); }
 .rail-btn:disabled { opacity: 0.35; cursor: default; }
 .rail-btn.accent { color: var(--green); }
 /* Подпись всплывает справа: иконок в плашке шесть, и без подписей «прицел» и
@@ -675,8 +1026,8 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
   left: calc(100% + 10px);
   top: 50%;
   transform: translateY(-50%);
-  background: rgba(16, 16, 16, 0.9);
-  color: #fff;
+  background: var(--tip);
+  color: var(--tip-ink);
   padding: 5px 10px;
   border-radius: 8px;
   font-size: 12.5px;
@@ -698,7 +1049,7 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
   z-index: 5;
   background: var(--card);
   border-radius: 16px;
-  box-shadow: 0 2px 6px rgba(16, 16, 16, 0.12), 0 10px 28px rgba(16, 16, 16, 0.14);
+  box-shadow: var(--shadow-float);
   padding: 16px 22px 16px 18px;
   display: grid;
   gap: 14px;
@@ -715,23 +1066,47 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
   transform: translateX(-50%);
   z-index: 5;
   max-width: min(560px, calc(100% - 160px));
-  background: rgba(255, 255, 255, 0.96);
+  background: var(--overlay);
+  color: var(--ink);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow);
   padding: 9px 14px;
   font-size: 13.5px;
   text-align: center;
 }
-.map-hint.warn { background: #fdf6e6; }
+.map-hint.warn { background: var(--suppression-soft); color: var(--suppression-ink); }
 
-/* Карточка над выбранным полем: белая, скруглённая, с хвостиком к контуру.
-   Хвостик рисует сам maplibre — его достаточно перекрасить в белый. */
+/* Карточка над выбранным полем: скруглённая, с хвостиком к контуру.
+   Хвостик рисует сам maplibre, и в его собственных стилях он прибит к белому.
+   Перекрашивать приходится все четыре направления по отдельности: библиотека
+   рисует треугольник границей блока, и в зависимости от того, с какой стороны
+   контура всплыла карточка, «цветом карточки» оказывается то верхняя граница,
+   то нижняя. В тёмной теме незакрашенный хвостик — белый шип под тёмной
+   карточкой, промахнуться мимо него невозможно. */
 .field-popup .maplibregl-popup-content {
   background: var(--card);
+  color: var(--ink);
   border-radius: 12px;
   padding: 12px 18px 14px;
-  box-shadow: 0 2px 6px rgba(16, 16, 16, 0.14), 0 10px 30px rgba(16, 16, 16, 0.22);
+  box-shadow: var(--shadow-float);
 }
+.field-popup .maplibregl-popup-tip { border-color: transparent; }
+.field-popup.maplibregl-popup-anchor-top .maplibregl-popup-tip,
+.field-popup.maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+.field-popup.maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+  border-bottom-color: var(--card);
+}
+.field-popup.maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+.field-popup.maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+.field-popup.maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+  border-top-color: var(--card);
+}
+.field-popup.maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: var(--card); }
+.field-popup.maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: var(--card); }
+/* Крестик закрытия библиотека красит своим тёмным — на тёмной карточке он
+   пропадает. */
+.field-popup .maplibregl-popup-close-button { color: var(--ink-soft); }
+.field-popup .maplibregl-popup-close-button:hover { background: var(--hover); color: var(--ink); }
 .field-tip strong {
   display: block;
   font-size: 15px;
@@ -768,7 +1143,8 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
 /* Атрибуция источника тайлов обязательна по условиям и Esri, и OSM. Компактная
    и приглушённая, но всегда на экране. */
 .map-stage .maplibregl-ctrl-attrib {
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--attrib);
+  color: var(--ink);
   border-radius: 8px;
   font-size: 11px;
 }
@@ -785,7 +1161,7 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
   padding: 14px 18px;
   cursor: pointer;
 }
-.anomaly:hover { background: #fafafa; }
+.anomaly:hover { background: var(--row-hover); }
 .anomaly.active { background: var(--green-soft); border-left-color: var(--green); }
 .anomaly .head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .anomaly .dates { font-weight: 700; font-size: 13.5px; }
@@ -801,13 +1177,32 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
   white-space: nowrap;
 }
 
+/* Класс аномалии цветом.
+ *
+ * Раньше цвет плашки приходил из словаря прямо в атрибут style, и тема на него
+ * повлиять не могла: тёмно-красная надпись на бледно-розовой подложке в тёмной
+ * теме превращалась в тёмное на тёмном. Смысл цвета остался в словаре (там же,
+ * где название класса), а его оттенок под конкретную тему — здесь. */
+.tone-critical { background: var(--critical-soft); color: var(--critical-ink); }
+.tone-suppression { background: var(--suppression-soft); color: var(--suppression-ink); }
+.tone-normal { background: var(--st-ok-bg); color: var(--st-ok-ink); }
+/* На плашке с рамкой (chip) подложка своя, красить нужно только надпись.
+   Берётся приглушённый оттенок, а не тот, которым красится контур на карте:
+   насыщенный оранжевый #e08a20 на белом даёт контраст 2,6 — для подписи в
+   двенадцать пунктов этого мало. */
+.chip.tone-critical { background: var(--card); color: var(--critical-ink); }
+.chip.tone-suppression { background: var(--card); color: var(--suppression-ink); }
+/* Только надпись, без подложки: строка класса аномалии внутри подсказки графика. */
+.text-critical { color: var(--critical-ink); }
+.text-suppression { color: var(--suppression-ink); }
+
 /* ================================================================ индикаторы */
 
 .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; }
-.dot.ok { background: #57c05a; }
+.dot.ok { background: var(--dot-ok); }
 .dot.warn { background: var(--suppression); }
 .dot.bad { background: var(--critical); }
-.dot.idle { background: #c2c2c2; }
+.dot.idle { background: var(--dot-idle); }
 
 .chip {
   display: inline-flex;
@@ -819,10 +1214,10 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
   font-size: 12.5px;
   background: var(--card);
 }
-.chip.warn { border-color: #e8cd97; background: #fdf6e6; }
-.chip.bad { border-color: #eab3ad; background: var(--critical-soft); }
+.chip.warn { border-color: var(--suppression-line); background: var(--suppression-soft); color: var(--suppression-ink); }
+.chip.bad { border-color: var(--critical-line); background: var(--critical-soft); color: var(--critical-ink); }
 
-.progress { height: 6px; border-radius: 999px; background: #e6e6e6; overflow: hidden; }
+.progress { height: 6px; border-radius: 999px; background: var(--track); overflow: hidden; }
 .progress > div { height: 100%; background: var(--green); transition: width 0.35s ease; }
 
 .banner {
@@ -830,9 +1225,9 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
   padding: 11px 14px;
   font-size: 13px;
   background: var(--critical-soft);
-  color: #8a2118;
+  color: var(--critical-ink);
 }
-.banner.warn { background: #fdf6e6; color: #7a5410; }
+.banner.warn { background: var(--suppression-soft); color: var(--suppression-ink); }
 
 .empty { padding: 34px 20px; text-align: center; color: var(--ink-soft); }
 
@@ -859,7 +1254,7 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
 }
 .table td { padding: 13px 14px; border-top: 1px solid var(--line); vertical-align: middle; }
 .table tr.pick { cursor: pointer; }
-.table tr.pick:hover td { background: #fafafa; }
+.table tr.pick:hover td { background: var(--row-hover); }
 .table tr.sel td { background: var(--green-soft); }
 .table td.num, .table th.num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 
@@ -910,7 +1305,7 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
   color: var(--ink);
   appearance: none;
   cursor: pointer;
-  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%236f6f6f' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 6l5 5 5-5'/%3E%3C/svg%3E");
+  background-image: var(--arrow-soft);
   background-repeat: no-repeat;
   background-position: right 13px center;
 }
@@ -933,10 +1328,10 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
   font-weight: 500;
   color: var(--ink);
 }
-.fields-table tbody { background: #f4f4f4; }
-.fields-table td { padding: 12px 18px; border-top: 0; border-bottom: 1px solid #111; }
+.fields-table tbody { background: var(--surface-2); }
+.fields-table td { padding: 12px 18px; border-top: 0; border-bottom: 1px solid var(--table-divider); }
 .fields-table tbody tr:last-child td { border-bottom: 0; }
-.fields-table tr.pick:hover td { background: #ededed; }
+.fields-table tr.pick:hover td { background: var(--row-hover-2); }
 .fields-table .who { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .fields-table .name {
   font-size: 15px;
@@ -964,6 +1359,13 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
   text-align: center;
   white-space: nowrap;
 }
+/* Подложка и надпись плашки — из переменных темы, а не из словаря состояний.
+   Словарь задаёт цвет контура на карте, где он лежит на спутниковом снимке;
+   на бледной подложке списка тот же насыщенный зелёный давал контраст 1,8. */
+.status.st-ok { background: var(--st-ok-bg); color: var(--st-ok-ink); }
+.status.st-watch { background: var(--st-watch-bg); color: var(--st-watch-ink); }
+.status.st-bad { background: var(--st-bad-bg); color: var(--st-bad-ink); }
+.status.st-nodata { background: var(--st-nodata-bg); color: var(--st-nodata-ink); }
 
 /* Спутниковая миниатюра участка. Тайлы лежат в увеличенном квадрате, который
    сдвинут так, чтобы центр поля пришёлся на середину; лишнее отрезается. */
@@ -973,9 +1375,9 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
   flex: none;
   border-radius: 10px;
   overflow: hidden;
-  background: #dcdcdc;
+  background: var(--thumb);
 }
-.thumb.empty { background: repeating-linear-gradient(45deg, #e2e2e2 0 6px, #d8d8d8 6px 12px); }
+.thumb.empty { background: repeating-linear-gradient(45deg, var(--thumb-a) 0 6px, var(--thumb-b) 6px 12px); }
 .thumb-grid { position: absolute; inset: 0; }
 .thumb-grid img { position: absolute; display: block; }
 
@@ -992,7 +1394,7 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
   border-radius: 8px;
   color: var(--ink-soft);
 }
-.row-menu .dots:hover { background: #e2e2e2; color: var(--ink); }
+.row-menu .dots:hover { background: var(--hover-strong); color: var(--ink); }
 .menu-row.danger { color: var(--critical); }
 
 /* ======================================================== раздел «Аналитика» */
@@ -1022,7 +1424,7 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
 }
 .kpi .value .unit { font-size: 0.52em; font-weight: 700; letter-spacing: 0; }
 .kpi .note { font-size: 13.5px; font-weight: 600; margin-top: 6px; min-height: 18px; }
-.kpi .note.up { color: var(--green); }
+.kpi .note.up { color: var(--green-text); }
 .kpi .note.down { color: var(--critical); }
 .kpi .note.bad { color: var(--critical); }
 .kpi .note.muted { color: var(--ink-soft); font-weight: 500; }
@@ -1176,15 +1578,20 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
   .map-region select { min-width: 0; height: 40px; font-size: 14px; padding: 0 34px 0 12px; }
   .map-hint { font-size: 12.5px; max-width: calc(100% - 140px); }
   .btn { height: 38px; padding: 0 13px; font-size: 13px; }
-}
 
-/* Крупные экраны: масштаб по макету.
- *
- * Макеты нарисованы в 1920×1080, и на такой ширине интерфейс должен выглядеть
- * так же просторно: колонка шире, строки выше, шрифты крупнее. Ниже 1441 всё
- * остаётся как было — там места нет, и увеличенный набор ломал бы вёрстку.
- * Отдельным блоком, а не правкой базовых значений, ровно поэтому: узкие окна
- * не должны пострадать от подгонки под большой макет. */
+  /* Управление шапки перестаёт быть одной неразрывной группой.
+     Держать его в строку правильно на компьютере, но на телефоне четыре
+     элемента подряд шире экрана: ряд не переносился и вылезал за правый край,
+     утаскивая за собой всю страницу в боковую прокрутку. */
+  .topbar { gap: 10px; padding: 14px 6px 12px; }
+  .topbar-title { flex: 1 1 100%; }
+  /* Одного flex-wrap мало: группа объявлена как `flex: 0 0 auto`, то есть
+     шириной по содержимому и без права сжиматься, — при таком основании
+     переносить внутри себя нечего, и ряд просто вылезает за край экрана.
+     Сначала разрешаем группе занять строку целиком, и только тогда перенос
+     начинает работать. */
+  .topbar-actions { flex: 1 1 100%; min-width: 0; flex-wrap: wrap; margin-left: 0; gap: 8px; }
+}
 
 @media (min-width: 1441px) {
   :root { --nav-width: 356px; }
@@ -1334,3 +1741,160 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
   .source-row { display: none; }
   .nav-card .head { margin-bottom: 0; }
 }
+
+/* ============================================================== телефон */
+
+/* Ниже 560 пунктов интерфейс перестраивается всерьёз, а не ужимается.
+ *
+ * Главное изменение — навигация. До этой ширины колонка разделов уезжает
+ * наверх полосой, но на экране в 360 пунктов полоса из пяти названий не
+ * помещается и превращается в горизонтальную прокрутку внутри прокрутки.
+ * Поэтому разделы переезжают в закреплённую нижнюю панель — туда, где на
+ * телефоне до них дотягивается большой палец, — а наверху остаются только
+ * логотип и карточка режима работы. */
+
+@media (max-width: 560px) {
+  .shell {
+    /* Место под нижнюю панель: без него подпись о числе участков и последняя
+       карточка раздела уходят под неё и дочитать их нечем. */
+    padding-bottom: 66px;
+  }
+
+  .nav {
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 12px;
+    /* Боковая прокрутка внутри полосы больше не нужна: в ней остались два
+       элемента, и они помещаются на любой ширине. */
+    overflow: visible;
+  }
+  .nav-spacer { display: none; }
+
+  .nav-items {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 60;
+    display: flex;
+    justify-content: space-around;
+    gap: 0;
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+    background: var(--nav);
+    border-top: 1px solid var(--nav-line);
+  }
+  .nav-item {
+    position: relative;
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 3px;
+    padding: 5px 2px;
+    font-size: 11px;
+    font-weight: 600;
+    text-align: center;
+    border-radius: 10px;
+    white-space: nowrap;
+    min-width: 0;
+  }
+  /* Значок возвращается: в нижней панели он несёт узнавание раздела, а
+     подписи в одиннадцать пунктов работают подсказкой к нему. */
+  .nav-item svg { display: block; width: 20px; height: 20px; }
+  .nav-item.active { background: var(--nav-hover); color: var(--green); }
+  /* Счётчик участков рядом с подписью не помещается — уводим его в угол
+     значка, как отметку непрочитанного. */
+  .nav-item .count { position: absolute; margin: 0; top: 2px; right: 8px; font-size: 10px; }
+  .nav-item.active .count { color: var(--green); }
+
+  .nav-logo svg { width: 28px; height: 28px; }
+  .nav-logo .wordmark { font-size: 13px; }
+  .nav-foot { padding: 6px 9px; }
+  .nav-foot .mark { width: 28px; height: 28px; }
+  .nav-foot .who { font-size: 12.5px; }
+  /* Карточка режима теперь стоит наверху, и раскрываться ей нужно вниз:
+     всплывая вверх, она уходила за верхний край окна целиком. */
+  .nav-menu { bottom: auto; top: calc(100% + 8px); }
+
+  .main { padding: 0 10px 10px; }
+  .canvas.scroll { padding: 16px 12px 18px; }
+  .card { padding: 16px 14px; }
+  .card + .card { margin-top: 12px; }
+
+  /* Раскрытая панель шире экрана не бывает.
+     Панель быстрого старта раскрывается от левого края блока и при жёсткой
+     ширине в 340 пунктов вылезала за правый край страницы. */
+  .popover { width: min(340px, calc(100vw - 28px)); }
+  .popover.left { left: 0; right: 0; width: auto; }
+
+  /* Панели шапки раскрываются во всю ширину под ней, а не от своей кнопки.
+     Кнопки в шапке переносятся на вторую строку и стоят слева, а панель
+     раскрывается влево от кнопки — при ширине экрана в 360 пунктов её левый
+     край уходил на 148 пунктов за край окна, и половина списка была
+     недоступна. Убираем у обёртки кнопки признак «точки отсчёта», и панель
+     начинает считаться от самой шапки. */
+  .topbar .pill-wrap { position: static; }
+  .topbar .popover { left: 8px; right: 8px; top: calc(100% - 6px); width: auto; }
+
+  /* Показатель «Обзора»: изменение переезжает под число.
+     Втроём — значок, число и длинная подпись изменения — они в строку уже не
+     встают, и «17 240,1 га под наблюдением» наезжало на декоративные полоски. */
+  .stat {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: 'glyph label' 'glyph value' 'delta delta';
+    padding: 14px 34px 14px 14px;
+    gap: 2px 14px;
+  }
+  .stat .delta { text-align: left; margin-top: 8px; }
+  .stat .stripes { right: 10px; gap: 5px; }
+  .stat .stripes i { width: 2px; }
+  .stat .glyph svg { width: 34px; height: 34px; }
+  .stat .value { font-size: 27px; }
+  .stat .value.word { font-size: 22px; }
+
+  .section-title { font-size: 17px; }
+  .topbar h1 { font-size: 18px; }
+  .pill { height: 38px; padding: 0 10px; font-size: 12.5px; }
+  .pill.icon-only { width: 38px; }
+
+  /* «Участки»: фильтры в столбик, поиск на всю ширину. */
+  .fields-bar { gap: 8px; }
+  .fields-bar .select { flex: 1 1 140px; min-width: 0; }
+  .table-card .table { min-width: 520px; }
+  .table-foot { padding: 14px; font-size: 14px; }
+
+  /* Разбор поля на карте: погода с двумя шкалами и подписями по краям в
+     360 пунктов оставляет под сам график полосу в полторы сотни. */
+  .map-charts { padding: 12px 10px; }
+  .map-wrap { height: clamp(240px, 38dvh, 340px); }
+  .map-topbar { padding: 7px 10px; gap: 8px; }
+  .map-legend { padding: 9px 12px 9px 10px; gap: 7px; }
+  .legend-row { font-size: 12px; gap: 8px; }
+  .legend-row .swatch { width: 14px; height: 14px; }
+  .map-hint { font-size: 12px; padding: 7px 10px; max-width: calc(100% - 120px); }
+  .anomaly { padding: 12px 14px; }
+
+  .zones { gap: 14px; }
+  .donut { width: 110px; height: 110px; }
+  .quickstart { padding: 18px 16px; }
+  .quickstart h2 { font-size: 20px; }
+  .quickstart p { font-size: 14px; }
+  .activity { padding: 16px 14px; }
+  .activity h2 { font-size: 19px; }
+}
+
+/* Совсем узкие экраны — 360 пунктов и уже. Отдельной ступенью, потому что
+   подписи разделов в нижней панели на 320 пунктах начинают переноситься. */
+@media (max-width: 380px) {
+  .nav-item { font-size: 10px; padding: 5px 0; }
+  .nav-item svg { width: 19px; height: 19px; }
+  .nav-logo .wordmark { display: none; }
+  .stat .value { font-size: 24px; }
+  .table-card .table { min-width: 460px; }
+}
+
+/* Крупные экраны: масштаб по макету.
+ *
+ * Макеты нарисованы в 1920×1080, и на такой ширине интерфейс должен выглядеть
+ * так же просторно: колонка шире, строки выше, шрифты крупнее. Ниже 1441 всё
+ * остаётся как было — там места нет, и увеличенный набор ломал бы вёрстку.
+ * Отдельным блоком, а не правкой базовых значений, ровно поэтому: узкие окна
+ * не должны пострадать от подгонки под большой макет. */

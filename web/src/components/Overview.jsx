@@ -40,7 +40,7 @@ export default function Overview({
               ? `${summary.total_area_ha.toLocaleString('ru-RU')} га под наблюдением`
               : 'Ни одного участка не сохранено'
           }
-          deltaTone={summary?.polygons ? 'var(--green)' : 'var(--ink-soft)'}
+          deltaTone={summary?.polygons ? 'var(--green-text)' : 'var(--ink-soft)'}
         />
         <Stat
           color="var(--purple)"

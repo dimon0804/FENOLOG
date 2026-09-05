@@ -1,6 +1,53 @@
 import { useEffect, useRef, useState } from 'react'
 
+import { useTheme } from '../theme.js'
 import { IconBell, IconCalendar, IconChevron, IconPin } from './icons.jsx'
+
+// Значки переключателя темы объявлены здесь, а не в общем наборе icons.jsx:
+// они нужны ровно одному элементу интерфейса и больше нигде не встречаются.
+const stroke = {
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.7,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+}
+
+function IconSun(props) {
+  return (
+    <svg viewBox="0 0 24 24" width={19} height={19} {...stroke} {...props}>
+      <circle cx="12" cy="12" r="4.2" />
+      <path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.2 5.2l1.4 1.4M17.4 17.4l1.4 1.4M18.8 5.2l-1.4 1.4M6.6 17.4l-1.4 1.4" />
+    </svg>
+  )
+}
+
+function IconMoon(props) {
+  return (
+    <svg viewBox="0 0 24 24" width={19} height={19} {...stroke} {...props}>
+      <path d="M20 14.4A8.4 8.4 0 0 1 9.6 4a8.4 8.4 0 1 0 10.4 10.4Z" />
+    </svg>
+  )
+}
+
+// «Как в системе» — монитор: тот же знак, что в системных настройках, и
+// объяснять его словом не приходится.
+function IconSystem(props) {
+  return (
+    <svg viewBox="0 0 24 24" width={19} height={19} {...stroke} {...props}>
+      <rect x="2.8" y="4.2" width="18.4" height="12.6" rx="2" />
+      <path d="M8.5 20.2h7M12 16.8v3.4" />
+    </svg>
+  )
+}
+
+// Порядок и подписи режимов. Держатся списком, потому что тот же список
+// рисуется и в раскрытой панели, и в значке самой кнопки.
+const THEMES = [
+  { key: 'light', title: 'Светлая', Icon: IconSun, hint: 'всегда светлое' },
+  { key: 'dark', title: 'Тёмная', Icon: IconMoon, hint: 'всегда тёмное' },
+  { key: 'system', title: 'Как в системе', Icon: IconSystem, hint: 'по настройке устройства' },
+]
 
 // Глубина истории. В макете на этом месте выбор года, но у сервиса год — не та
 // величина, которой пользователь управляет: ряд строится за несколько сезонов
@@ -38,6 +85,8 @@ export default function Topbar({
 }) {
   const [open, setOpen] = useState(null)
   const wrap = useRef(null)
+  const { mode, setMode } = useTheme()
+  const themeOption = THEMES.find((item) => item.key === mode) || THEMES[2]
 
   // Клик мимо закрывает раскрытую панель: без этого они накладываются друг на
   // друга и остаются висеть после перехода в другой раздел.
@@ -125,7 +174,7 @@ export default function Topbar({
             <IconChevron className="chev" />
           </button>
           {open === 'years' && (
-            <div className="popover" style={{ width: 300 }}>
+            <div className="popover wide">
               <h4>Сколько сезонов собирать</h4>
               {YEAR_OPTIONS.map((option) => (
                 <button
@@ -138,6 +187,41 @@ export default function Topbar({
                 >
                   <div>{option.title}</div>
                   <div className="small muted">{option.hint}</div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Тема оформления. Три состояния, а не выключатель на два: «как в
+            системе» — это не то же самое, что «светлая», и на устройстве с
+            автоматическим переключением по времени суток разница видна. */}
+        <div className="pill-wrap">
+          <button
+            className="pill icon-only"
+            onClick={() => setOpen(open === 'theme' ? null : 'theme')}
+            title={`Тема: ${themeOption.title.toLowerCase()}`}
+            aria-label="Тема оформления"
+          >
+            <themeOption.Icon />
+          </button>
+          {open === 'theme' && (
+            <div className="popover narrow">
+              <h4>Тема оформления</h4>
+              {THEMES.map((option) => (
+                <button
+                  key={option.key}
+                  className={`menu-row row theme-row${option.key === mode ? ' active' : ''}`}
+                  onClick={() => {
+                    setMode(option.key)
+                    setOpen(null)
+                  }}
+                >
+                  <option.Icon width={17} height={17} />
+                  <span>
+                    <span style={{ display: 'block' }}>{option.title}</span>
+                    <span className="small muted">{option.hint}</span>
+                  </span>
                 </button>
               ))}
             </div>

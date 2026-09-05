@@ -4,7 +4,27 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="color-scheme" content="light dark" />
     <title>Фенолог — мониторинг вегетационной динамики</title>
+    <script>
+      // Тема применяется до первой отрисовки, а не в React.
+      //
+      // Бандл грузится и выполняется уже после того, как браузер нарисовал
+      // страницу. Если ставить атрибут темы из приложения, тёмный интерфейс
+      // успевает мигнуть светлым — заметно и неприятно. Поэтому пять строк
+      // здесь, в разметке: ключ хранилища тот же, что в src/theme.js.
+      (function () {
+        try {
+          var mode = localStorage.getItem('fenolog-theme')
+          if (mode === 'dark' || mode === 'light') {
+            document.documentElement.setAttribute('data-theme', mode)
+            document.documentElement.style.colorScheme = mode
+          }
+        } catch (e) {
+          // Хранилище закрыто настройками приватности — работаем в системной теме.
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>
