@@ -540,29 +540,48 @@ input { font: inherit; }
 /* ================================================================== адаптив */
 
 /* Ширины подобраны по реальным окнам, а не по круглым числам: 1440 — окно
-   ноутбука не на весь экран, 1200 — половина экрана рядом с другим окном,
-   1000 — узкое окно и планшет, 760 — телефон. */
+ * ноутбука не на весь экран, 1200 — половина экрана рядом с другим окном,
+ * 1000 и 860 — узкое окно на компьютере, 780 — телефон и планшет.
+ *
+ * Колонка разделов держится до последнего и уезжает наверх только на 860.
+ * Окно шириной 900 — это по-прежнему компьютер, и «мобильная» раскладка в нём
+ * выглядит поломкой, а не адаптацией. */
 
 @media (max-width: 1440px) {
   :root { --nav-width: 252px; }
-  .stat { min-height: 260px; }
+  .stat { min-height: 250px; }
+  .stat .glyph { margin-bottom: 16px; }
   .map-bottom { grid-template-columns: 1fr 320px; }
 }
 
 @media (max-width: 1200px) {
   :root { --nav-width: 232px; }
   .topbar h1 { font-size: 23px; }
-  .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
   /* Третья карточка занимает всю ширину — так ряд не разваливается на 2 + 1
      с дырой справа. */
-  .stat-grid > :nth-child(3) { grid-column: 1 / -1; min-height: 200px; }
+  .stat-grid > :nth-child(3) { grid-column: 1 / -1; }
+  .stat { min-height: 200px; padding-right: 54px; }
   .quickstart .art { opacity: 0.5; right: -40px; }
 }
 
 @media (max-width: 1000px) {
-  /* Колонка навигации перестаёт быть колонкой: она уезжает наверх обычной
-     полосой, а разделы становятся горизонтальным рядом с прокруткой. Держать
-     её сбоку на такой ширине значит съесть четверть экрана под меню. */
+  :root { --nav-width: 206px; }
+  .nav { padding: 16px 12px; gap: 14px; }
+  .nav-item { padding: 10px 12px; font-size: 14.5px; gap: 11px; }
+  .nav-item svg { width: 19px; height: 19px; }
+  .nav-logo svg { width: 40px; height: 40px; }
+  .main { padding: 0 12px 12px; }
+  .canvas.scroll { padding: 20px 18px 22px; }
+  .map-bottom { grid-template-columns: 1fr; }
+  .map-feed { border-left: 0; border-top: 1px solid var(--line); }
+  .popover { width: min(340px, calc(100vw - 32px)); }
+}
+
+@media (max-width: 860px) {
+  /* Здесь колонка перестаёт быть колонкой: уезжает наверх обычной полосой,
+     разделы становятся горизонтальным рядом с прокруткой. Держать её сбоку на
+     такой ширине значит съесть треть экрана под меню. */
   .shell { grid-template-columns: 1fr; }
   .nav {
     position: static;
@@ -570,13 +589,13 @@ input { font: inherit; }
     flex-direction: row;
     align-items: center;
     gap: 12px;
-    padding: 12px 14px;
+    padding: 10px 12px;
     overflow-x: auto;
   }
   .nav-logo { flex-direction: row; gap: 10px; padding: 0; }
-  .nav-logo svg { width: 34px; height: 34px; }
+  .nav-logo svg { width: 32px; height: 32px; }
   .nav-items { flex-direction: row; gap: 4px; }
-  .nav-item { padding: 9px 13px; font-size: 14.5px; white-space: nowrap; }
+  .nav-item { padding: 8px 12px; white-space: nowrap; }
   .nav-item svg { display: none; }
   /* Карточка источников уходит — её содержимое доступно по колокольчику в
      шапке. Подпись сервиса остаётся: она отвечает на вопрос «что это вообще
@@ -586,18 +605,43 @@ input { font: inherit; }
   .nav-foot { padding: 7px 10px; }
   .nav-foot .role { display: none; }
 
-  .main { padding: 0 12px 12px; }
-  .topbar { padding: 14px 4px 12px; }
-  .canvas.scroll { padding: 18px 16px 20px; }
-  .stat-grid { grid-template-columns: 1fr; }
-  .stat-grid > :nth-child(3) { grid-column: auto; }
-  .stat { min-height: 190px; padding-right: 52px; }
-  .map-bottom { grid-template-columns: 1fr; }
-  .map-feed { border-left: 0; border-top: 1px solid var(--line); }
   .map-screen { grid-template-rows: minmax(300px, 46%) 1fr; height: auto; }
   .map-charts, .map-feed { overflow: visible; }
   .map-wrap { height: 46vh; min-height: 300px; }
-  .popover { width: min(340px, calc(100vw - 32px)); }
+}
+
+@media (max-width: 780px) {
+  /* В одну колонку карточка показателя разворачивается в строку: значок
+     слева, подпись и число посередине, изменение справа. Вертикальная
+     карточка во всю ширину — это триста пикселей пустоты вокруг одной
+     цифры. */
+  .stat-grid { grid-template-columns: 1fr; gap: 12px; }
+  .stat-grid > :nth-child(3) { grid-column: auto; }
+  .stat {
+    min-height: 0;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: 'glyph label delta' 'glyph value delta';
+    align-items: center;
+    gap: 4px 16px;
+    padding: 16px 46px 16px 18px;
+  }
+  .stat .glyph { grid-area: glyph; margin: 0; }
+  .stat .glyph svg { width: 42px; height: 42px; }
+  .stat .label { grid-area: label; font-size: 14px; align-self: end; }
+  .stat .value { grid-area: value; font-size: 34px; margin: 0; align-self: start; }
+  .stat .value.word { font-size: 26px; }
+  .stat .delta { grid-area: delta; margin: 0; font-size: 12.5px; text-align: right; }
+  .stat .stripes { right: 14px; gap: 4px; }
+
+  .topbar h1 { font-size: 20px; }
+  .topbar .sub { display: none; }
+  .pill { height: 40px; padding: 0 12px; font-size: 13px; }
+  .quickstart { padding: 22px 20px; }
+  .quickstart h2 { font-size: 22px; }
+  .quickstart .art { display: none; }
+  .map-tools { top: 10px; left: 10px; gap: 6px; }
+  .btn { height: 38px; padding: 0 13px; font-size: 13px; }
 }
 
 /* Адаптив по высоте окна.
@@ -628,15 +672,4 @@ input { font: inherit; }
      колокольчике в шапке. */
   .source-row { display: none; }
   .nav-card .head { margin-bottom: 0; }
-}
-
-@media (max-width: 760px) {
-  .topbar h1 { font-size: 20px; }
-  .topbar .sub { display: none; }
-  .pill { height: 40px; padding: 0 12px; font-size: 13px; }
-  .quickstart { padding: 22px 20px; }
-  .quickstart h2 { font-size: 22px; }
-  .quickstart .art { display: none; }
-  .map-tools { top: 10px; left: 10px; gap: 6px; }
-  .btn { height: 38px; padding: 0 13px; font-size: 13px; }
 }
