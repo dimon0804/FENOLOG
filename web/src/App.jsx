@@ -191,7 +191,10 @@ export default function App() {
   }
 
   const anomalies = result?.anomalies || []
-  const title = selected?.name || draft?.name || 'Поле не выбрано'
+  // Нарисованный контур имени ещё не имеет, но он уже выбран — заголовок
+  // «Поле не выбрано» над строкой «нарисован вручную» противоречит сам себе.
+  const title =
+    selected?.name || draft?.name || (draft ? 'Новый контур' : 'Поле не выбрано')
 
   return (
     <div className="app">
