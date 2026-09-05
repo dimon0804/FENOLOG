@@ -68,11 +68,34 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Расширения, содержимое которых уже сжато своим форматом. Второй проход gzip по
+# ним не то что не выигрывает — проигрывает: woff2 шрифта Manrope, 24 836 байт,
+# после gzip занимает 24 864. Плюс процессорное время на каждой отдаче и потеря
+# заголовка Content-Length, по которому браузер рисует прогресс загрузки.
+_ALREADY_COMPRESSED = (".woff2", ".woff", ".png", ".jpg", ".jpeg", ".webp", ".avif", ".gz", ".zip")
+
+
+class SmartGZipMiddleware(GZipMiddleware):
+    """GZip, не трогающий уже сжатые файлы.
+
+    В Starlette 0.41 GZipMiddleware решает по одному только размеру ответа и про
+    тип содержимого не знает. Здесь добавлена проверка по расширению пути: это
+    единственное, что известно до вызова приложения, и для статики сборки этого
+    достаточно — имена файлов формирует vite, и расширение у них всегда честное.
+    """
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope.get("path", "").endswith(_ALREADY_COMPRESSED):
+            await self.app(scope, receive, send)
+            return
+        await super().__call__(scope, receive, send)
+
+
 # Сжатие ответов.
 #
-# Код интерфейса и JSON сервиса — текст, и сжимается он втрое-вчетверо: бандл
-# 241 КБ уходит как 76 КБ, список участков 56 КБ как 8 КБ. Без этого middleware
-# uvicorn отдаёт всё как есть, и на обычном канале разница видна глазами.
+# Код интерфейса и JSON сервиса — текст, и сжимается он втрое-вчетверо. Без
+# этого middleware uvicorn отдаёт всё как есть, и на обычном канале разница
+# видна глазами.
 #
 # На публичном домене перед сервисом стоит nginx со своим gzip, и там это
 # дублирование. Но полагаться на него нельзя: сервис должен быть быстрым и когда
@@ -80,9 +103,14 @@ app.add_middleware(
 # ровно то, как его будут смотреть на защите.
 #
 # minimum_size: ответы меньше килобайта сжимать вредно — заголовок gzip и работа
-# на обеих сторонах стоят дороже сэкономленных байтов. Шрифты (woff2) и картинки
-# middleware не тронет: они уже сжаты, и Starlette пропускает их по типу.
-app.add_middleware(GZipMiddleware, minimum_size=1024)
+# на обеих сторонах стоят дороже сэкономленных байтов.
+#
+# compresslevel=6, а не умолчательные 9. Замерено на чанке карты, 1 038 439
+# байт: шестёрка даёт 272 261 байт за 31 мс, девятка — 271 420 за 40 мс. Треть
+# лишнего процессорного времени на каждой холодной загрузке ради трёх десятых
+# процента размера. Шестёрку по этой же причине выбирают умолчанием nginx и
+# apache.
+app.add_middleware(SmartGZipMiddleware, minimum_size=1024, compresslevel=6)
 
 
 @app.exception_handler(GeometryError)
@@ -564,8 +592,40 @@ app.mount("/errors", StaticFiles(directory=str(ERROR_PAGES_DIR)), name="errors")
 # Если внутренние адреса когда-нибудь появятся (роутер, ссылки на конкретное
 # поле), запасной вариант добавляется ровно здесь: обработчик на 404, который
 # для путей вне «/api» отдаёт index.html с кодом 200.
+class HashedStaticFiles(StaticFiles):
+    """Статика сборки с разным сроком жизни кэша для разных файлов.
+
+    Vite складывает имя каждого файла из его содержимого: `index-CNGIyjIU.js`.
+    Меняется содержимое — меняется имя, старое имя никогда не начнёт означать
+    что-то другое. Значит такой файл можно кэшировать вечно, и браузер на втором
+    открытии не пойдёт за ним вовсе — ни за телом, ни за подтверждением.
+
+    А `index.html` — единственный файл с постоянным именем, и в нём лежат ссылки
+    на всё остальное. Закэшировать его значило бы навсегда прибить пользователя
+    к старой сборке. Поэтому ему `no-cache`: браузер каждый раз спрашивает, не
+    изменился ли он, и по совпадению ETag получает 304 без тела — один короткий
+    запрос вместо всей загрузки.
+
+    Каталог `/maplibre/` — исключение: файлы воркера копируются туда с исходными
+    именами, без хеша (иначе воркер не найдёт соседний модуль, см. vite.config.js).
+    Раз имя постоянное, вечный кэш им нельзя — они идут по правилу index.html.
+    """
+
+    # Год — общепринятый практический предел: спецификация HTTP разрешает больше,
+    # но заметная часть прокси и браузеров обрезает всё сверх этого сама.
+    IMMUTABLE = "public, max-age=31536000, immutable"
+    REVALIDATE = "no-cache"
+
+    def file_response(self, full_path, stat_result, scope, status_code=200):
+        response = super().file_response(full_path, stat_result, scope, status_code=status_code)
+        path = scope.get("path", "")
+        hashed = path.startswith("/assets/") and not path.startswith("/maplibre/")
+        response.headers["Cache-Control"] = self.IMMUTABLE if hashed else self.REVALIDATE
+        return response
+
+
 if config.WEB_DIST.exists():
-    app.mount("/", StaticFiles(directory=str(config.WEB_DIST), html=True), name="web")
+    app.mount("/", HashedStaticFiles(directory=str(config.WEB_DIST), html=True), name="web")
 else:
     @app.get("/", include_in_schema=False)
     def _no_web() -> dict:

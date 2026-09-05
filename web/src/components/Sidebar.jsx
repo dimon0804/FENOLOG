@@ -35,8 +35,22 @@ export const SECTIONS = [
 export default function Sidebar({
   section, onSection, health, fieldsCount, version, onRecheck, rechecking,
 }) {
-  const tone = { ok: 'ok', degraded: 'warn', down: 'bad' }[health?.status] || 'warn'
-  const stateText = { ok: 'Активны', degraded: 'Частично', down: 'Сбой' }[health?.status] || '…'
+  // Пока ответа нет — точка нейтральная и мигающая, а не оранжевая: оранжевый
+  // здесь означает «часть источников молчит», и показывать его до проверки
+  // значило бы пугать пользователя тем, чего мы ещё не знаем.
+  const tone = { ok: 'ok', degraded: 'warn', down: 'bad' }[health?.status] || 'wait'
+  const stateText = { ok: 'Активны', degraded: 'Частично', down: 'Сбой' }[health?.status] || 'проверяю'
+
+  // Ответа ещё нет. Это не редкость и не полсекунды: проверка ходит в четыре
+  // внешних сервиса по-настоящему, и на холодном кэше замер дал 22 секунды.
+  // Остальной экран её не ждёт (запрос идёт сам по себе), но панель всё это
+  // время оставалась пустой прямоугольной дырой — по ней невозможно понять,
+  // сломано ли что-то или сервис ещё думает.
+  //
+  // Поэтому строки рисуются сразу, с теми же названиями: они известны на
+  // клиенте (SOURCE_TITLES), а не приходят с сервера. Заодно панель не
+  // подпрыгивает, когда ответ наконец придёт, — высота уже правильная.
+  const pending = !health
 
   // Время последней проверки. Панель, которая всегда показывает «отвечает» и
   // ничем не выдаёт, что она живая, неотличима от зелёной картинки для вида —
@@ -76,6 +90,13 @@ export default function Sidebar({
             {stateText}
           </span>
         </div>
+        {pending && Object.entries(SOURCE_TITLES).map(([key, title]) => (
+          <div key={key} className="source-row waiting">
+            <div className="name">{title}</div>
+            <div className="when">проверяю…</div>
+          </div>
+        ))}
+
         {(health?.sources || []).map((source) => (
           <div key={source.key} className={`source-row${source.status === 'ok' ? '' : ' down'}`}>
             <div className="name">{SOURCE_TITLES[source.key] || source.title}</div>

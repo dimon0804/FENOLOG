@@ -538,6 +538,10 @@ input { font: inherit; }
 .source-row .name { font-size: 13px; color: var(--nav-text); }
 .source-row .when { font-size: 10.5px; color: var(--nav-muted); }
 .source-row.down .name { color: var(--nav-down); }
+/* Строки на время проверки: приглушены, чтобы их не приняли за готовый ответ,
+   но читаемы — по ним видно, какие именно источники сейчас опрашиваются. */
+.source-row.waiting .name,
+.source-row.waiting .when { opacity: 0.5; }
 /* Последствие отказа: показывается только под упавшим источником, поэтому
    в обычном состоянии панель не растёт и выглядит как раньше. */
 .source-row .consequence {
@@ -985,7 +989,22 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
 /* Сцена — всё, что лежит поверх снимка, позиционируется относительно неё, а не
    всей коробки: иначе плашки уползали бы под верхнюю панель. */
 .map-stage { position: relative; flex: 1 1 auto; min-height: 0; }
-.map { position: absolute; inset: 0; }
+
+/* Селектор нарочно составной, хотя одного класса хватило бы.
+ *
+ * На этом же элементе висит класс библиотеки — `class="map maplibregl-map"`, —
+ * и в maplibre-gl.css есть правило `.maplibregl-map { position: relative }`.
+ * Вес у `.map` и `.maplibregl-map` одинаковый (один класс), поэтому спор
+ * решает порядок файлов. Пока весь CSS собирался в один файл, порядок случайно
+ * оказывался нашим. После разделения кода стили карты уехали в отдельный файл
+ * чанка, который грузится позже основного, — и правило библиотеки стало
+ * побеждать. Карта получала `position: relative` вместо `absolute`, теряла
+ * растяжку по `inset` и схлопывалась в нулевую высоту: холст есть, тайлы
+ * скачиваются, слои на месте, а на экране белый прямоугольник.
+ *
+ * `.map-stage > .map` — это два класса против одного, спор выигран по весу и
+ * порядок файлов больше ни на что не влияет. */
+.map-stage > .map { position: absolute; inset: 0; }
 
 /* Вертикальная плашка слева из макета: рисование и зум одной колонкой,
    разделители между смысловыми группами. */
@@ -1203,6 +1222,9 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
 .dot.warn { background: var(--suppression); }
 .dot.bad { background: var(--critical); }
 .dot.idle { background: var(--dot-idle); }
+/* Проверка ещё идёт: нейтральный серый и мигание. Цвет результата (зелёный,
+   оранжевый, красный) появится, когда результат будет. */
+.dot.wait { background: var(--dot-idle); animation: lazy-pulse 1.1s ease-in-out infinite; }
 
 .chip {
   display: inline-flex;

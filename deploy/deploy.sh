@@ -41,6 +41,7 @@ docker run -d \
     -e FENOLOG_TASK_WORKERS=3 \
     -e FENOLOG_NEIGHBOURS=1 \
     -e FENOLOG_SIBLINGS_BUDGET=300 \
+    -e FENOLOG_CROPLAND_PROXY="${FENOLOG_CROPLAND_PROXY:-}" \
     "$IMAGE"
 
 echo "==> Жду, пока поднимется"

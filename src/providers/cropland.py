@@ -59,6 +59,8 @@ WorldCereal делает то, на что он годится по своей �
 """
 from __future__ import annotations
 
+import os
+
 import requests
 
 from src.providers.cache import cached
@@ -87,6 +89,17 @@ ASSET = "classification"
 CROPLAND_VALUE = 100.0
 
 HTTP_HEADERS = {"User-Agent": "fenolog/1.0 (vegetation monitoring service)"}
+
+# Прокси только для этого источника, и только если он задан переменной
+# окружения FENOLOG_CROPLAND_PROXY. Причина: Terrascope отвечает не из всех
+# сетей — с рабочей машины он открыт, а с сервера соединение не устанавливается
+# вовсе. Остальные источники (снимки, погода, контуры) ходят напрямую: гнать их
+# через один узкий канал значит замедлить весь сбор ради одной проверки.
+#
+# Учётные данные держим в переменной окружения, а не в коде: репозиторий
+# публичный, и вписанный в него пароль от прокси — это выданный всем пароль.
+_PROXY = os.environ.get("FENOLOG_CROPLAND_PROXY", "").strip()
+PROXIES = {"http": _PROXY, "https": _PROXY} if _PROXY else None
 
 STAC_TIMEOUT = 25          # поиск лёгкий: замерено 0,5-1,0 с
 STATS_TIMEOUT = 90         # статистика тяжелее, но и она укладывалась в 2,1 с
@@ -134,7 +147,8 @@ def _find_items(bbox: tuple[float, float, float, float]) -> list[str]:
     """Идентификаторы снимков WorldCereal, накрывающих рамку. [] — не нашлось."""
     body = {"collections": [COLLECTION], "bbox": list(bbox), "limit": MAX_ITEMS}
     response = requests.post(STAC_SEARCH_URL, json=body,
-                             headers=HTTP_HEADERS, timeout=STAC_TIMEOUT)
+                             headers=HTTP_HEADERS, timeout=STAC_TIMEOUT,
+                             proxies=PROXIES)
     if response.status_code != 200:
         return []
     features = response.json().get("features") or []
@@ -151,7 +165,7 @@ def _item_fraction(item_id: str, feature: dict) -> tuple[float, int, float] | No
     url = (f"{TITILER_URL}/collections/{COLLECTION}/items/{item_id}"
            f"/statistics?assets={ASSET}")
     response = requests.post(url, json=feature, headers=HTTP_HEADERS,
-                             timeout=STATS_TIMEOUT)
+                             timeout=STATS_TIMEOUT, proxies=PROXIES)
     if response.status_code != 200:
         return None
     stats = (response.json().get("properties") or {}).get("statistics") or {}
@@ -255,7 +269,8 @@ def is_available() -> bool:
             return False
         url = (f"{TITILER_URL}/collections/{COLLECTION}/items/{items[0]}"
                f"/point/39.31,47.30?assets={ASSET}")
-        response = requests.get(url, headers=HTTP_HEADERS, timeout=STAC_TIMEOUT)
+        response = requests.get(url, headers=HTTP_HEADERS, timeout=STAC_TIMEOUT,
+                                proxies=PROXIES)
         return response.status_code == 200
     except Exception:  # noqa: BLE001
         return False
