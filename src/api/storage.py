@@ -154,6 +154,24 @@ class PolygonStore:
                 return dict(item)
         return None
 
+    def set_agro(self, polygon_id: str, events: list[dict]) -> dict | None:
+        """Записывает журнал полевых работ участка.
+
+        Журнал хранится прямо в записи участка, а не отдельным файлом: он мелкий
+        (десятки строк на сезон), меняется вместе с участком и должен исчезать
+        вместе с ним. Разбор ядра читает его при следующем пересчёте.
+        """
+        self._ensure_loaded()
+        with self._lock:
+            for item in self._items:
+                if item["id"] != polygon_id:
+                    continue
+                item["agro_events"] = list(events or [])
+                item["updated_at"] = _now()
+                self._write()
+                return dict(item)
+        return None
+
     def delete(self, polygon_id: str) -> bool:
         self._ensure_loaded()
         with self._lock:

@@ -391,6 +391,51 @@ def polygons_result(polygon_id: str) -> dict:
     }
 
 
+@app.get("/api/polygons/{polygon_id}/agro", tags=["участки"])
+def polygons_agro_get(polygon_id: str) -> dict:
+    """Журнал полевых работ участка."""
+    polygon = store.get(polygon_id)
+    if polygon is None:
+        raise HTTPException(status_code=404, detail="Участок не найден")
+    return {"polygon_id": polygon_id, "events": polygon.get("agro_events") or []}
+
+
+@app.put("/api/polygons/{polygon_id}/agro", tags=["участки"])
+def polygons_agro_put(polygon_id: str, events: list[dict]) -> dict:
+    """Заменяет журнал полевых работ участка целиком.
+
+    Каждая запись — словарь с датой и видом работ; понимаются и русские, и
+    английские имена полей («дата»/«date_from», «вид»/«kind»), потому что
+    агроном чаще всего вставляет свою таблицу как есть. Разбор ядра подхватит
+    журнал при следующем пересчёте участка.
+
+    Замена целиком, а не добавление по одной записи: журнал ведут таблицей, и
+    выгрузить её заново проще, чем сверять, какие строки уже отправлены.
+    """
+    polygon = store.get(polygon_id)
+    if polygon is None:
+        raise HTTPException(status_code=404, detail="Участок не найден")
+
+    # Проверяем разбором ядра: пусть ошибку в дате пользователь увидит сразу,
+    # а не через пять минут в виде разбора без объяснений.
+    from src.core.agrolog import load_events
+
+    parsed = load_events(list(events or []))
+    if events and not parsed:
+        raise HTTPException(
+            status_code=400,
+            detail="Ни одна запись журнала не разобрана: нужны дата и вид работ",
+        )
+
+    store.set_agro(polygon_id, list(events or []))
+    return {
+        "polygon_id": polygon_id,
+        "saved": len(events or []),
+        "recognised": len(parsed),
+        "note": "журнал учтётся при следующем пересчёте участка",
+    }
+
+
 @app.get("/api/polygons/{polygon_id}/report.pdf", tags=["участки"])
 def polygons_report_pdf(polygon_id: str):
     """Клиентский отчёт по участку одним PDF-файлом.

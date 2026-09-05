@@ -167,7 +167,16 @@ class TaskManager:
             # восстановление ряда на длинной истории занимает заметное время, и
             # шкала, замирающая на «готово» после сбора, выглядит зависшей.
             self._set(task, STAGE_RESTORE, 88)
-            result = analyze(series_input)
+            # Журнал полевых работ, если агроном его завёл. Ядро использует его,
+            # чтобы «причина не погодная» перестала быть тупиком: уборка в
+            # периоде объясняет плановое падение, а гербицид за неделю до
+            # просадки — возможную фитотоксичность. Раньше журнал работал только
+            # из командной строки, а веб-сценарий про него не знал вовсе.
+            agro_events = None
+            if task.polygon_id:
+                saved = store.get(task.polygon_id)
+                agro_events = (saved or {}).get("agro_events") or None
+            result = analyze(series_input, agro_events=agro_events)
             self._set(task, STAGE_ANOMALIES, 95)
             result.meta.update(report.as_meta())
 
