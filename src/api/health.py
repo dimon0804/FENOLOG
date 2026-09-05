@@ -20,6 +20,7 @@ import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 
 from src.api import config
 
@@ -127,6 +128,10 @@ def providers_health(force: bool = False) -> dict:
         # сценарий проходит; down — обязательный источник недоступен.
         "status": "down" if down_required else ("degraded" if down_optional else "ok"),
         "sources": sources,
+        # Момент настоящей проверки, а не выдачи ответа: между ними стоит кэш,
+        # и интерфейс, показывая «обновлено в 8:30», обязан называть время
+        # опроса источников, иначе подпись врёт на минуту в каждом ответе.
+        "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "checked_in_seconds": round(time.perf_counter() - started, 2),
         "cache_ttl_seconds": config.HEALTH_TTL_SECONDS,
     }
