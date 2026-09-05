@@ -184,3 +184,71 @@ export const Logo = ({ size = 62 }) => (
     />
   </svg>
 )
+
+/* --- иконки экрана карты: панель сверху и вертикальная плашка слева --- */
+
+// Стрелка «назад» из макета — тонкая, длинная, без засечек.
+export const IconBack = (p) => (
+  <svg {...base} {...p}>
+    <path d="M20 12H4M10.5 5.5 4 12l6.5 6.5" />
+  </svg>
+)
+
+// Прицел: «искать поля в этой рамке карты».
+export const IconTarget = (p) => (
+  <svg {...base} {...p}>
+    <circle cx="12" cy="12" r="7" />
+    <circle cx="12" cy="12" r="2" />
+    <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+  </svg>
+)
+
+export const IconPlus = (p) => (
+  <svg {...base} {...p}>
+    <path d="M12 5.5v13M5.5 12h13" />
+  </svg>
+)
+
+export const IconMinus = (p) => (
+  <svg {...base} {...p}>
+    <path d="M5.5 12h13" />
+  </svg>
+)
+
+// Стопка слоёв — переключение «снимок / схема».
+export const IconLayers = (p) => (
+  <svg {...base} {...p}>
+    <path d="M12 3 3 8l9 5 9-5-9-5z" />
+    <path d="M3 13.5 12 18.5 21 13.5" />
+  </svg>
+)
+
+// Многоугольник с вершинами — рисование собственного контура.
+export const IconPolygon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M6 5.5 18.5 9 15 19 7 17z" />
+    <circle cx="6" cy="5.5" r="1.8" fill="currentColor" stroke="none" />
+    <circle cx="18.5" cy="9" r="1.8" fill="currentColor" stroke="none" />
+    <circle cx="15" cy="19" r="1.8" fill="currentColor" stroke="none" />
+    <circle cx="7" cy="17" r="1.8" fill="currentColor" stroke="none" />
+  </svg>
+)
+
+export const IconCheck = (p) => (
+  <svg {...base} {...p}>
+    <path d="M5 12.5 10 17.5 19 7" />
+  </svg>
+)
+
+export const IconUndo = (p) => (
+  <svg {...base} {...p}>
+    <path d="M9 8.5 4.5 13 9 17.5" />
+    <path d="M4.5 13h9a5 5 0 0 0 0-10H11" />
+  </svg>
+)
+
+export const IconClose = (p) => (
+  <svg {...base} {...p}>
+    <path d="M6 6l12 12M18 6 6 18" />
+  </svg>
+)

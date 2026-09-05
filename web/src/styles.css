@@ -409,8 +409,6 @@ input { font: inherit; }
 
 /* ==================================================================== карта */
 
-/* flex: 1 обязателен: без него экран карты сжимается по содержимому, и под
-   ним остаётся пустая половина панели. */
 /* Экран карты помещается в окно целиком: карта сверху, разбор снизу. Ниже
    нижней границы он не сжимается — вместо этого прокручивается страница, и в
    низком окне ничего не обрезается. */
@@ -423,40 +421,210 @@ input { font: inherit; }
 /* Карта занимает верхнюю часть окна и остаётся на месте, пока пользователь
    листает разбор поля: выбранный контур должен быть виден, когда читаешь про
    его аномалии. Раньше вся страница была заперта в высоту окна, а разбор
-   прокручивался внутри узкой коробки — листать это было неудобно. */
+   прокручивался внутри узкой коробки — листать это было неудобно.
+
+   Внутри — две части по макету: узкая светлая панель сверху и сам снимок под
+   ней. Поэтому колонка flex, а не одна абсолютная коробка: панель задаёт свою
+   высоту сама, снимок забирает остаток. */
 .map-wrap {
-  height: clamp(300px, 46dvh, 560px);
+  height: clamp(340px, 52dvh, 620px);
   position: sticky;
   top: 12px;
   z-index: 2;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius) var(--radius) 0 0;
+  overflow: hidden;
 }
+
+/* Верхняя панель макета: только «назад» и регион. Всё управление картой
+   специально уехало в плашку слева — панель должна оставаться пустой и
+   светлой, иначе она превращается во вторую шапку. */
+.map-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+  padding: 9px 14px;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+}
+
+.map-back {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+  flex: 0 0 auto;
+}
+.map-back:hover { background: #f1f1f1; }
+
+/* Свой список вместо готового компонента: вариантов восемь, они не ищутся и не
+   грузятся — родной select здесь и легче, и правильнее с клавиатуры. Стрелка
+   нарисована фоном, чтобы совпасть с макетом. */
+.map-region select {
+  appearance: none;
+  height: 44px;
+  min-width: 230px;
+  max-width: 100%;
+  padding: 0 42px 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background-color: var(--card);
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23101010' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9.5 12 15.5 18 9.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.map-region select:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+
+/* Сцена — всё, что лежит поверх снимка, позиционируется относительно неё, а не
+   всей коробки: иначе плашки уползали бы под верхнюю панель. */
+.map-stage { position: relative; flex: 1 1 auto; min-height: 0; }
 .map { position: absolute; inset: 0; }
 
-.map-tools {
+/* Вертикальная плашка слева из макета: рисование и зум одной колонкой,
+   разделители между смысловыми группами. */
+/* Плашка прижата к верху, а не к середине, как в макете: карта на узком экране
+   становится низкой, и центрированная колонка из шести кнопок наезжала бы на
+   масштабную линейку и атрибуцию в левом нижнем углу. */
+.map-rail {
   position: absolute;
-  top: 16px;
-  left: 16px;
+  left: 14px;
+  top: 14px;
   z-index: 5;
+  background: var(--card);
+  border-radius: 16px;
+  box-shadow: 0 2px 6px rgba(16, 16, 16, 0.12), 0 10px 28px rgba(16, 16, 16, 0.14);
+  padding: 6px;
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  max-width: calc(100% - 32px);
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
 }
+.rail-btn {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+}
+.rail-btn:hover { background: #f1f1f1; }
+.rail-btn:disabled { opacity: 0.35; cursor: default; }
+.rail-btn.accent { color: var(--green); }
+/* Подпись всплывает справа: иконок в плашке шесть, и без подписей «прицел» и
+   «многоугольник» пришлось бы угадывать. */
+.rail-btn::after {
+  content: attr(data-label);
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(16, 16, 16, 0.9);
+  color: #fff;
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+.rail-btn:hover::after { opacity: 1; }
+.rail-btn:disabled:hover::after { opacity: 0; }
+.rail-sep { width: 26px; height: 1px; background: var(--line); margin: 4px 0; }
 
+/* Легенда. Цвета берутся из того же словаря, что и заливка полей на карте
+   (dict.js), — разойтись они не могут. */
+.map-legend {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 5;
+  background: var(--card);
+  border-radius: 16px;
+  box-shadow: 0 2px 6px rgba(16, 16, 16, 0.12), 0 10px 28px rgba(16, 16, 16, 0.14);
+  padding: 16px 22px 16px 18px;
+  display: grid;
+  gap: 14px;
+}
+.legend-row { display: flex; align-items: center; gap: 14px; font-size: 14px; }
+.legend-row .swatch { width: 22px; height: 22px; border-radius: 4px; flex: 0 0 auto; }
+
+/* Подсказка висит сверху по центру: снизу уже заняты линейка слева и легенда
+   справа, и подсказка внизу перекрывала бы то одну, то другую. */
 .map-hint {
   position: absolute;
-  bottom: 14px;
-  left: 16px;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 5;
-  max-width: min(680px, calc(100% - 32px));
-  background: rgba(255, 255, 255, 0.95);
+  max-width: min(560px, calc(100% - 160px));
+  background: rgba(255, 255, 255, 0.96);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow);
-  padding: 10px 14px;
+  padding: 9px 14px;
   font-size: 13.5px;
+  text-align: center;
 }
 .map-hint.warn { background: #fdf6e6; }
+
+/* Карточка над выбранным полем: белая, скруглённая, с хвостиком к контуру.
+   Хвостик рисует сам maplibre — его достаточно перекрасить в белый. */
+.field-popup .maplibregl-popup-content {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 12px 18px 14px;
+  box-shadow: 0 2px 6px rgba(16, 16, 16, 0.14), 0 10px 30px rgba(16, 16, 16, 0.22);
+}
+.field-tip strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+.field-tip span { display: block; margin-top: 8px; color: var(--ink-soft); font-size: 13.5px; }
+
+/* Масштабная линейка в левом нижнем углу: подпись над отрезком, без плашки —
+   ровно как в макете. Белым с тенью, чтобы читалось и на снимке, и на схеме. */
+.map-scale {
+  position: absolute;
+  left: 16px;
+  bottom: 44px;
+  z-index: 5;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+.map-scale span { display: block; padding-left: 3px; }
+/* Отрезок с засечками по краям: нижняя граница — сам отрезок, боковые — засечки. */
+.map-scale i {
+  display: block;
+  height: 6px;
+  margin-top: 2px;
+  border: 2px solid rgba(255, 255, 255, 0.95);
+  border-top: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+.map-stage .maplibregl-ctrl-bottom-left { margin: 0 0 12px 14px; }
+/* Атрибуция источника тайлов обязательна по условиям и Esri, и OSM. Компактная
+   и приглушённая, но всегда на экране. */
+.map-stage .maplibregl-ctrl-attrib {
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 8px;
+  font-size: 11px;
+}
 
 .map-bottom { display: grid; grid-template-columns: 1fr 360px; min-height: 0; border-top: 1px solid var(--line); }
 .map-charts { padding: 18px 20px; min-width: 0; }
@@ -653,7 +821,13 @@ input { font: inherit; }
   .quickstart { padding: 22px 20px; }
   .quickstart h2 { font-size: 22px; }
   .quickstart .art { display: none; }
-  .map-tools { top: 10px; left: 10px; gap: 6px; }
+  .map-rail { left: 10px; }
+  .rail-btn { width: 38px; height: 38px; }
+  .map-legend { right: 10px; bottom: 10px; padding: 12px 16px 12px 13px; gap: 10px; }
+  .legend-row { font-size: 13px; gap: 10px; }
+  .legend-row .swatch { width: 18px; height: 18px; }
+  .map-region select { min-width: 0; height: 40px; font-size: 14px; padding: 0 34px 0 12px; }
+  .map-hint { font-size: 12.5px; max-width: calc(100% - 140px); }
   .btn { height: 38px; padding: 0 13px; font-size: 13px; }
 }
 

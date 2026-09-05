@@ -14,10 +14,17 @@ import WeatherPanel from './WeatherPanel.jsx'
 export default function MapWorkspace(props) {
   const {
     parcels,
+    saved,
     geometry,
+    selectedLabel,
     regionOutline,
+    regionKey,
+    regionTitle,
+    onPickRegion,
+    onBack,
     flyTo,
     onPickParcel,
+    onOpenSaved,
     onDrawn,
     onDiscover,
     discovering,
@@ -31,10 +38,17 @@ export default function MapWorkspace(props) {
     <div className="map-screen">
       <MapPanel
         parcels={parcels}
+        saved={saved}
         selectedGeometry={geometry}
+        selectedLabel={selectedLabel}
         regionOutline={regionOutline}
+        regionKey={regionKey}
+        regionTitle={regionTitle}
+        onPickRegion={onPickRegion}
+        onBack={onBack}
         flyTo={flyTo}
         onPickParcel={onPickParcel}
+        onOpenSaved={onOpenSaved}
         onDrawn={onDrawn}
         onDiscover={onDiscover}
         discovering={discovering}
