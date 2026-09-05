@@ -34,6 +34,7 @@ export default function App() {
 
   const [summary, setSummary] = useState(null)
   const [health, setHealth] = useState(null)
+  const [rechecking, setRechecking] = useState(false)
 
   const [selected, setSelected] = useState(null) // сохранённый участок
   const [draft, setDraft] = useState(null) // ещё не сохранённый контур
@@ -83,6 +84,18 @@ export default function App() {
     const timer = setInterval(load, 60000)
     return () => { alive = false; clearInterval(timer) }
   }, [])
+
+  async function recheckHealth() {
+    setRechecking(true)
+    try {
+      setHealth(await api.health(true))
+    } catch {
+      // Молчим намеренно: неудачная перепроверка не должна ронять экран,
+      // а прошлое состояние остаётся на месте и подписано своим временем.
+    } finally {
+      setRechecking(false)
+    }
+  }
 
   const geometry = draft?.geometry || selected?.geometry || null
 
@@ -301,6 +314,8 @@ export default function App() {
         health={health}
         fieldsCount={summary?.polygons || 0}
         version={VERSION}
+        rechecking={rechecking}
+        onRecheck={recheckHealth}
       />
 
       <div className="main">

@@ -29,9 +29,19 @@ export const SECTIONS = [
   { key: 'reports', title: 'Отчёты', Icon: IconReports },
 ]
 
-export default function Sidebar({ section, onSection, health, fieldsCount, version }) {
+export default function Sidebar({
+  section, onSection, health, fieldsCount, version, onRecheck, rechecking,
+}) {
   const tone = { ok: 'ok', degraded: 'warn', down: 'bad' }[health?.status] || 'warn'
   const stateText = { ok: 'Активны', degraded: 'Частично', down: 'Сбой' }[health?.status] || '…'
+
+  // Время последней проверки. Панель, которая всегда показывает «отвечает» и
+  // ничем не выдаёт, что она живая, неотличима от зелёной картинки для вида —
+  // а это ровно та нечестность, которой в продукте быть не должно.
+  const checkedAt = health?.checked_at ? new Date(health.checked_at) : null
+  const checkedText = checkedAt
+    ? checkedAt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+    : null
 
   return (
     <nav className="nav">
@@ -72,8 +82,29 @@ export default function Sidebar({ section, onSection, health, fieldsCount, versi
             <div className="when">
               {source.status === 'ok' ? 'Отвечает' : 'Недоступен'}
             </div>
+            {/* Последствие отказа сервер считает давно, но интерфейс его
+                выбрасывал. «Недоступен» само по себе не отвечает на вопрос,
+                можно ли продолжать работу, — а именно он у пользователя и
+                возникает. */}
+            {source.status !== 'ok' && source.consequence && (
+              <div className="consequence">{source.consequence}</div>
+            )}
           </div>
         ))}
+
+        <button
+          type="button"
+          className="source-recheck"
+          onClick={onRecheck}
+          disabled={rechecking}
+          title="Опросить источники заново, минуя кэш"
+        >
+          {rechecking
+            ? 'проверяю…'
+            : checkedText
+              ? `проверено в ${checkedText} · обновить`
+              : 'проверить сейчас'}
+        </button>
       </div>
 
       <div className="nav-foot">

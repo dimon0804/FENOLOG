@@ -194,6 +194,32 @@ input { font: inherit; }
 .source-row .name { font-size: 13px; color: var(--nav-text); }
 .source-row .when { font-size: 10.5px; color: var(--nav-muted); }
 .source-row.down .name { color: #f0a49c; }
+/* Последствие отказа: показывается только под упавшим источником, поэтому
+   в обычном состоянии панель не растёт и выглядит как раньше. */
+.source-row .consequence {
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: #f0a49c;
+  margin-top: 3px;
+  opacity: 0.85;
+}
+/* Строка «проверено в 09:31 · обновить» — единственное, что доказывает
+   пользователю, что панель живая, а не нарисована зелёной для вида. */
+.source-recheck {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 5px 0 0;
+  border: 0;
+  border-top: 1px solid var(--nav-line);
+  background: none;
+  color: var(--nav-muted);
+  font-size: 10.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.source-recheck:hover:not(:disabled) { color: var(--nav-text); }
+.source-recheck:disabled { cursor: default; opacity: 0.6; }
 
 .nav-foot {
   display: flex;

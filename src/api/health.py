@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 
 from src.api import config
@@ -128,6 +129,10 @@ def providers_health(force: bool = False) -> dict:
         "status": "down" if down_required else ("degraded" if down_optional else "ok"),
         "sources": sources,
         "checked_in_seconds": round(time.perf_counter() - started, 2),
+        # Момент последней настоящей проверки. Нужен интерфейсу: панель, которая
+        # всегда показывает «отвечает» и ничем не выдаёт, что она живая,
+        # неотличима от зелёной картинки, нарисованной для вида.
+        "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "cache_ttl_seconds": config.HEALTH_TTL_SECONDS,
     }
 
