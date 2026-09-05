@@ -24,6 +24,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.gzip import GZipMiddleware
 
 from src.api import config, geocoding
 from src.api.errors import PAGES_DIR as ERROR_PAGES_DIR, error_response
@@ -66,6 +67,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Сжатие ответов.
+#
+# Код интерфейса и JSON сервиса — текст, и сжимается он втрое-вчетверо: бандл
+# 241 КБ уходит как 76 КБ, список участков 56 КБ как 8 КБ. Без этого middleware
+# uvicorn отдаёт всё как есть, и на обычном канале разница видна глазами.
+#
+# На публичном домене перед сервисом стоит nginx со своим gzip, и там это
+# дублирование. Но полагаться на него нельзя: сервис должен быть быстрым и когда
+# его подняли одной командой `docker compose up`, без всякого прокси — а это
+# ровно то, как его будут смотреть на защите.
+#
+# minimum_size: ответы меньше килобайта сжимать вредно — заголовок gzip и работа
+# на обеих сторонах стоят дороже сэкономленных байтов. Шрифты (woff2) и картинки
+# middleware не тронет: они уже сжаты, и Starlette пропускает их по типу.
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
 @app.exception_handler(GeometryError)

@@ -1,14 +1,28 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 
 import { api, pollTask } from './api.js'
 import { REGION_PRESETS, fieldState } from './dict.js'
-import Analytics from './components/Analytics.jsx'
 import Fields from './components/Fields.jsx'
-import MapWorkspace from './components/MapWorkspace.jsx'
 import Overview from './components/Overview.jsx'
 import Reports from './components/Reports.jsx'
 import Sidebar from './components/Sidebar.jsx'
 import Topbar from './components/Topbar.jsx'
+
+/*
+ * Тяжёлые разделы грузятся отдельными файлами.
+ *
+ * MapLibre (карта) и Recharts (графики) вместе занимают около 85 % бандла:
+ * одним куском он весил 1,66 МБ, и всё это скачивалось до первой отрисовки —
+ * даже если человек открыл «Обзор» и на карту в этот заход вообще не пойдёт.
+ * `lazy` разносит их по отдельным файлам, которые браузер запрашивает только
+ * при входе в соответствующий раздел.
+ *
+ * Делить именно по этим двум точкам, а не по всем пяти разделам: «Обзор»,
+ * «Участки» и «Отчёты» не тянут ни одной тяжёлой библиотеки, отдельные файлы
+ * для них дали бы лишние запросы без выигрыша по весу.
+ */
+const MapWorkspace = lazy(() => import('./components/MapWorkspace.jsx'))
+const Analytics = lazy(() => import('./components/Analytics.jsx'))
 
 const VERSION = '1.0'
 
@@ -64,6 +78,27 @@ export default function App() {
   const [discoverNote, setDiscoverNote] = useState(null)
 
   const [years, setYears] = useState(5)
+
+  // Догрузка кода карты и графиков, когда браузер освободился.
+  //
+  // Разделение кода само по себе переносит ожидание со старта на первый вход в
+  // раздел. Чтобы не менять шило на мыло, оба файла запрашиваются в простое
+  // сразу после первой отрисовки: стартовый экран уже нарисован и ничего не
+  // ждёт, а к моменту клика по «Карте» файл обычно уже лежит в кэше и
+  // заставка не успевает мелькнуть. requestIdleCallback есть не везде
+  // (Safari до 17), поэтому запасной вариант — обычный таймер.
+  useEffect(() => {
+    const warm = () => {
+      import('./components/MapWorkspace.jsx')
+      import('./components/Analytics.jsx')
+    }
+    if (typeof requestIdleCallback === 'function') {
+      const id = requestIdleCallback(warm, { timeout: 3000 })
+      return () => cancelIdleCallback(id)
+    }
+    const id = setTimeout(warm, 1200)
+    return () => clearTimeout(id)
+  }, [])
 
   // Сводка и список участков грузятся вместе: в сводке есть вердикт по каждому
   // полю, но нет геометрии, а карте нужно и то и другое. Падение одного из
@@ -342,6 +377,7 @@ export default function App() {
 
         {section === 'map' ? (
           <div className="canvas">
+            <Suspense fallback={<Loading what="карту" />}>
             <MapWorkspace
               {...shared}
               parcels={parcels}
@@ -361,6 +397,7 @@ export default function App() {
               discovering={discovering}
               discoverNote={discoverNote}
             />
+            </Suspense>
           </div>
         ) : (
           <div className="canvas scroll">
@@ -389,7 +426,9 @@ export default function App() {
               />
             )}
             {section === 'analytics' && (
-              <Analytics summary={summary} onOpenField={openField} />
+              <Suspense fallback={<Loading what="графики" />}>
+                <Analytics summary={summary} onOpenField={openField} />
+              </Suspense>
             )}
             {section === 'reports' && (
               <Reports summary={summary} onGoMap={() => setSection('map')} />
@@ -397,6 +436,23 @@ export default function App() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Заставка на время догрузки кода раздела.
+ *
+ * Показывается вместо пустоты, пока браузер качает отдельный файл карты или
+ * графиков. Обычно она не успевает появиться — код уже догружен в простое, —
+ * но на медленной связи и при первом заходе именно она объясняет паузу, а не
+ * оставляет человека перед пустым прямоугольником.
+ */
+function Loading({ what }) {
+  return (
+    <div className="lazy-hold">
+      <div className="lazy-dots" aria-hidden="true"><i /><i /><i /></div>
+      <p>Загружаю {what}…</p>
     </div>
   )
 }

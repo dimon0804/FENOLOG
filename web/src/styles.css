@@ -1898,3 +1898,48 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
  * остаётся как было — там места нет, и увеличенный набор ломал бы вёрстку.
  * Отдельным блоком, а не правкой базовых значений, ровно поэтому: узкие окна
  * не должны пострадать от подгонки под большой макет. */
+
+/* ================================================ заставка догрузки раздела
+
+   Карта и графики лежат в отдельных файлах сборки (см. React.lazy в App.jsx),
+   и на медленной связи между кликом по разделу и его появлением есть пауза.
+   Здесь она занята осмысленной подписью, а не пустым местом.
+
+   Точки анимируются через `opacity`, а не через размер или положение: браузер
+   считает такую анимацию на композиторе и не пересчитывает раскладку — в
+   момент, когда основной поток разбирает только что скачанный мегабайт кода,
+   любая анимация с раскладкой начала бы дёргаться. */
+.lazy-hold {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 320px;
+  padding: 40px 20px;
+  color: var(--ink-soft);
+}
+.lazy-hold p { margin: 0; font-size: 14px; }
+.lazy-dots { display: flex; gap: 7px; }
+.lazy-dots i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--nav-active-b, currentColor);
+  opacity: 0.25;
+  animation: lazy-pulse 1.1s ease-in-out infinite;
+}
+.lazy-dots i:nth-child(2) { animation-delay: 0.15s; }
+.lazy-dots i:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes lazy-pulse {
+  0%, 100% { opacity: 0.22; }
+  50% { opacity: 1; }
+}
+
+/* Уважаем системную настройку «меньше движения»: подпись остаётся, мигание
+   пропадает. */
+@media (prefers-reduced-motion: reduce) {
+  .lazy-dots i { animation: none; opacity: 0.6; }
+}
