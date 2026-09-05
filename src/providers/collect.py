@@ -53,6 +53,7 @@ class CollectReport:
     failures: list[str] = field(default_factory=list)
     date_from: str | None = None
     date_to: str | None = None
+    siblings: dict = field(default_factory=dict)   # диагностика поправки по соседям
 
     def as_meta(self) -> dict:
         return {
@@ -63,6 +64,9 @@ class CollectReport:
             "failures": self.failures,
             "date_from": self.date_from,
             "date_to": self.date_to,
+            # Общая суточная помеха, снятая по соседним полям: сколько соседей
+            # участвовало, на скольких датах и какой у поправки размах.
+            "siblings": self.siblings,
         }
 
 
@@ -121,8 +125,15 @@ def collect_series_with_report(
     years: int = DEFAULT_YEARS,
     progress=None,
     max_scenes: int | None = None,
+    use_neighbours: bool = True,
 ) -> tuple[SeriesInput, CollectReport]:
-    """То же, что collect_series, плюс отчёт о сборе для интерфейса."""
+    """То же, что collect_series, плюс отчёт о сборе для интерфейса.
+
+    use_neighbours — снимать ли общую суточную помеху по соседним полям. Это
+    главный приём проекта, и раньше он был доступен только пакетному режиму,
+    где все поля видны сразу. Сервис разбирает одно поле, поэтому соседей он
+    находит сам тем же поиском контуров, которым показывает поля на карте.
+    """
     from src.providers import satellite, weather
 
     t0 = time.perf_counter()
@@ -158,6 +169,22 @@ def collect_series_with_report(
     observations = sorted(
         [o for o in observations if o.ndvi is not None], key=lambda o: o.date
     )
+
+    # Снятие общей суточной помехи по соседним полям. Ошибка здесь не должна
+    # ронять разбор: не нашлись соседи или не ответил источник — работаем без
+    # поправки и честно пишем об этом в отчёт.
+    if use_neighbours and observations:
+        from src.providers.siblings import apply_correction, daily_correction
+
+        corr, sib_info = _safe(
+            "поправка по соседям",
+            lambda: daily_correction(geometry, start, end,
+                                     progress=lambda s_, d_, t_: step(s_, d_, t_)),
+            report, ({}, {"applied": False, "reason": "ошибка расчёта"}),
+        )
+        if corr:
+            observations = apply_correction(observations, corr)
+        report.siblings = sib_info
     report.observations = len(observations)
     report.weather_days = len(weather_points)
     for obs in observations:
@@ -184,6 +211,7 @@ def analyze_polygon(
     years: int = DEFAULT_YEARS,
     progress=None,
     max_scenes: int | None = None,
+    use_neighbours: bool = True,
 ):
     """Полный путь от контура на карте до готового анализа — одна строка для API.
 
@@ -196,6 +224,7 @@ def analyze_polygon(
     series, report = collect_series_with_report(
         geometry, polygon_id=polygon_id, crop_type=crop_type,
         years=years, progress=progress, max_scenes=max_scenes,
+        use_neighbours=use_neighbours,
     )
     result = analyze(series)
     result.meta.update(report.as_meta())

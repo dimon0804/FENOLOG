@@ -1399,3 +1399,10 @@ def fetch_observations(
     if obs:
         cache_set("satellite_ndvi", key, obs, ttl_days=SATELLITE_TTL_DAYS)
     return obs
+
+
+def is_cached(geometry: dict, start: date, end: date,
+              max_scenes: int | None = None, source: str | None = None) -> bool:
+    """Есть ли готовый ответ в кэше. Нужно тем, кто хочет собрать данные по
+    нескольким полям, но не готов ждать сеть: сначала берём то, что уже есть."""
+    return cache_get("satellite_ndvi", _cache_key(geometry, start, end, max_scenes, source)) is not None
