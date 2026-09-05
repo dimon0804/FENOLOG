@@ -627,6 +627,7 @@ API сервис не возвращает никогда.
 | PATCH | `/api/polygons/{id}` | переименовать, уточнить культуру |
 | DELETE | `/api/polygons/{id}` | удалить |
 | GET | `/api/polygons/{id}/result` | последний посчитанный разбор участка |
+| GET | `/api/polygons/{id}/report.pdf` | клиентский PDF-отчёт по участку |
 
 ### Стек
 

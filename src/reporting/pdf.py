@@ -304,7 +304,7 @@ def build_pdf(result: dict, polygon: dict | None = None) -> bytes:
         "Каждый год повторяется одна и та же волна: рост весной, максимум в начале "
         "лета, спад после уборки. Отклонения от этой волны и есть то, что сервис ищет.",
         s["body"]))
-    story.append(_png(charts.chart_series(result), 170, 82))
+    story.append(_png(charts.chart_series(result, height_mm=98), 170, 98))
     story.append(Spacer(1, 5 * mm))
 
     h2("Что означают события на графике")
@@ -407,11 +407,17 @@ def build_pdf(result: dict, polygon: dict | None = None) -> bytes:
         story.append(Paragraph(f"<b>{label} — {value} из 100.</b> {hint}", s["small"]))
     story.append(Spacer(1, 5 * mm))
 
+    story.append(PageBreak())
+
     h2("Как поле вело себя по сезонам")
-    story.append(_png(charts.chart_seasons(result), 170, 62))
+    story.append(Paragraph(
+        "Столбик — сколько зелёной массы поле набрало за сезон целиком. Это не "
+        "урожай в центнерах, а его косвенная мера: чем выше столбик, тем больше "
+        "поле работало за лето.", s["body"]))
+    story.append(_png(charts.chart_seasons(result, height_mm=78), 170, 78))
 
     if sc.get("caveats"):
-        story.append(Spacer(1, 4 * mm))
+        story.append(Spacer(1, 5 * mm))
         story.append(_card(
             [Paragraph("Что снижает точность этой оценки", s["h3"])]
             + [Paragraph(f"— {c}", s["small"]) for c in sc["caveats"]],
