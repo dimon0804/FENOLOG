@@ -76,6 +76,10 @@ export default function MapPanel({
   const [draftCount, setDraftCount] = useState(0)
   const drawingRef = useRef(false)
 
+  // Последнее, что положили в каждый слой. Это и есть источник правды: слои
+  // карты могут быть пересозданы в любой момент, состояние React — нет.
+  const layerData = useRef({ region: EMPTY, parcels: EMPTY, selected: EMPTY, draft: EMPTY })
+
   // ------------------------------------------------------------ создание карты
   useEffect(() => {
     const instance = new MapLibreMap({
@@ -106,20 +110,32 @@ export default function MapPanel({
   }, [basemap, ready])
 
   function addLayers(instance) {
-    const add = (id, data) => {
-      if (!instance.getSource(id)) instance.addSource(id, { type: 'geojson', data })
+    // Источники создаются сразу с актуальными данными, а не пустыми.
+    //
+    // Пустыми было нельзя по двум причинам, и обе выглядят как «карта потеряла
+    // полигон». Первая: слои создаются в обработчике load, то есть позже, чем
+    // отработали эффекты с данными, и выбранный участок, пришедший до загрузки
+    // карты (например, при открытии поля из раздела «Участки»), просто не
+    // доезжал. Вторая: смена подложки пересоздаёт стиль вместе со всеми
+    // источниками, а эффекты при этом не перезапускаются — зависимости не
+    // менялись, — и переключение «Карта / Снимок» стирало с карты и найденные
+    // контуры, и выбранное поле.
+    const add = (id) => {
+      if (!instance.getSource(id)) {
+        instance.addSource(id, { type: 'geojson', data: layerData.current[id] })
+      }
     }
-    add('region', EMPTY)
-    add('parcels', EMPTY)
-    add('selected', EMPTY)
-    add('draft', EMPTY)
+    add('region')
+    add('parcels')
+    add('selected')
+    add('draft')
 
     if (!instance.getLayer('region-line')) {
       instance.addLayer({
         id: 'region-line',
         type: 'line',
         source: 'region',
-        paint: { 'line-color': '#3f7d4e', 'line-width': 1.5, 'line-dasharray': [3, 2] },
+        paint: { 'line-color': '#4e9b36', 'line-width': 1.5, 'line-dasharray': [3, 2] },
       })
     }
     if (!instance.getLayer('parcels-fill')) {
@@ -127,13 +143,13 @@ export default function MapPanel({
         id: 'parcels-fill',
         type: 'fill',
         source: 'parcels',
-        paint: { 'fill-color': '#3f7d4e', 'fill-opacity': 0.18 },
+        paint: { 'fill-color': '#4e9b36', 'fill-opacity': 0.18 },
       })
       instance.addLayer({
         id: 'parcels-line',
         type: 'line',
         source: 'parcels',
-        paint: { 'line-color': '#3f7d4e', 'line-width': 1.2 },
+        paint: { 'line-color': '#4e9b36', 'line-width': 1.2 },
       })
     }
     if (!instance.getLayer('selected-fill')) {
@@ -141,13 +157,13 @@ export default function MapPanel({
         id: 'selected-fill',
         type: 'fill',
         source: 'selected',
-        paint: { 'fill-color': '#d98324', 'fill-opacity': 0.28 },
+        paint: { 'fill-color': '#e08a20', 'fill-opacity': 0.28 },
       })
       instance.addLayer({
         id: 'selected-line',
         type: 'line',
         source: 'selected',
-        paint: { 'line-color': '#b8651a', 'line-width': 2.4 },
+        paint: { 'line-color': '#c46a12', 'line-width': 2.4 },
       })
     }
     if (!instance.getLayer('draft-line')) {
@@ -174,13 +190,13 @@ export default function MapPanel({
   }
 
   const setData = (id, data) => {
+    layerData.current[id] = data
     const source = map.current?.getSource(id)
     if (source) source.setData(data)
   }
 
   // ------------------------------------------------------------ данные слоёв
   useEffect(() => {
-    if (!ready) return
     setData('parcels', {
       type: 'FeatureCollection',
       features: (parcels || []).map((p) => ({
@@ -190,22 +206,20 @@ export default function MapPanel({
         geometry: p.geometry,
       })),
     })
-  }, [parcels, ready])
+  }, [parcels])
 
   useEffect(() => {
-    if (!ready) return
     setData(
       'selected',
       selectedGeometry
         ? { type: 'Feature', properties: {}, geometry: selectedGeometry }
         : EMPTY,
     )
-  }, [selectedGeometry, ready])
+  }, [selectedGeometry])
 
   useEffect(() => {
-    if (!ready) return
     setData('region', regionOutline ? { type: 'Feature', properties: {}, geometry: regionOutline } : EMPTY)
-  }, [regionOutline, ready])
+  }, [regionOutline])
 
   // Перелёт к найденному региону или к выбранному полю.
   useEffect(() => {
@@ -343,21 +357,21 @@ export default function MapPanel({
       <div className="map-tools">
         {!drawing ? (
           <>
-            <button className="primary" onClick={discover} disabled={discovering}>
+            <button className="btn primary" onClick={discover} disabled={discovering}>
               {discovering ? 'Ищу поля…' : 'Найти поля в этом районе'}
             </button>
-            <button onClick={startDrawing}>Нарисовать полигон</button>
+            <button className="btn" onClick={startDrawing}>Нарисовать полигон</button>
           </>
         ) : (
           <>
-            <button className="primary" onClick={finishDrawing} disabled={draftCount < 3}>
+            <button className="btn primary" onClick={finishDrawing} disabled={draftCount < 3}>
               Завершить контур
             </button>
-            <button onClick={undoPoint} disabled={!draftCount}>Убрать точку</button>
-            <button onClick={cancelDrawing}>Отмена</button>
+            <button className="btn" onClick={undoPoint} disabled={!draftCount}>Убрать точку</button>
+            <button className="btn" onClick={cancelDrawing}>Отмена</button>
           </>
         )}
-        <button onClick={() => setBasemap(basemap === 'osm' ? 'satellite' : 'osm')}>
+        <button className="btn" onClick={() => setBasemap(basemap === 'osm' ? 'satellite' : 'osm')}>
           {BASEMAPS[basemap === 'osm' ? 'satellite' : 'osm'].title}
         </button>
       </div>
