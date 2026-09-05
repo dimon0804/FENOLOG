@@ -21,6 +21,7 @@ import threading
 import time
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 
 from src.api import config
 
@@ -128,11 +129,13 @@ def providers_health(force: bool = False) -> dict:
         # сценарий проходит; down — обязательный источник недоступен.
         "status": "down" if down_required else ("degraded" if down_optional else "ok"),
         "sources": sources,
-        "checked_in_seconds": round(time.perf_counter() - started, 2),
-        # Момент последней настоящей проверки. Нужен интерфейсу: панель, которая
-        # всегда показывает «отвечает» и ничем не выдаёт, что она живая,
-        # неотличима от зелёной картинки, нарисованной для вида.
+        # Момент настоящей проверки, а не выдачи ответа: между ними стоит кэш.
+        # Интерфейс, показывая «обновлено в 8:30», обязан называть время опроса
+        # источников, иначе подпись врёт на минуту в каждом ответе из кэша. И
+        # без неё панель, которая всегда показывает «отвечает», неотличима от
+        # зелёной картинки, нарисованной для вида.
         "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "checked_in_seconds": round(time.perf_counter() - started, 2),
         "cache_ttl_seconds": config.HEALTH_TTL_SECONDS,
     }
 

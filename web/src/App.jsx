@@ -18,7 +18,7 @@ const TITLES = {
   overview: ['Добро пожаловать', 'Независимые данные и прогнозы для вашего агробизнеса'],
   map: ['Карта', 'Найдите готовый контур или нарисуйте свой — дальше сервис всё сделает сам'],
   fields: ['Участки', 'Сохранённые поля: пересчёт, переименование, удаление'],
-  analytics: ['Аналитика', 'Сводка по хозяйству и сравнение полей между собой'],
+  analytics: ['Аналитика', 'Показатели выбранного поля по сезонам и сравнение полей'],
   reports: ['Отчёты', 'Выгрузка ряда и найденных периодов файлом'],
 }
 
@@ -319,9 +319,15 @@ export default function App() {
       />
 
       <div className="main">
+        {/* showRegion: поиск региона по названию остаётся только на карте.
+            На «Обзоре» его место занял выбор в блоке быстрого старта, а в
+            списках и отчётах он ничего не делает — только уводит на карту.
+            У самой карты есть свой список регионов ЮФО, но по нему не попасть
+            в конкретную станицу, поэтому поиск здесь и нужен. */}
         <Topbar
           title={title}
           subtitle={subtitle}
+          showRegion={section === 'map'}
           region={region}
           onSearchRegion={searchRegion}
           places={places}
@@ -359,7 +365,17 @@ export default function App() {
         ) : (
           <div className="canvas scroll">
             {section === 'overview' && (
-              <Overview summary={summary} onGoMap={() => setSection('map')} />
+              <Overview
+                summary={summary}
+                onGoMap={() => setSection('map')}
+                onOpenField={openField}
+                region={region}
+                onSearchRegion={searchRegion}
+                places={places}
+                searching={searching}
+                searchNote={searchNote}
+                onPickPlace={pickPlace}
+              />
             )}
             {section === 'fields' && (
               <Fields

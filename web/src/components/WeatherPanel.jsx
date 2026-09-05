@@ -49,13 +49,16 @@ export default function WeatherPanel({ weather, anomalies, activeAnomaly }) {
             stroke="#dddddd"
             minTickGap={40}
           />
-          <YAxis yAxisId="precip" tick={{ fontSize: 11, fill: '#6f6f6f' }} stroke="#dddddd" width={38} />
+          {/* Ширина оси считается под три знака: за декаду в ливень набегает
+              больше сотни миллиметров, и на 38 пикселях у «140» отрезало
+              первую цифру — подпись превращалась в «40». */}
+          <YAxis yAxisId="precip" tick={{ fontSize: 11, fill: '#6f6f6f' }} stroke="#dddddd" width={46} />
           <YAxis
             yAxisId="temp"
             orientation="right"
             tick={{ fontSize: 11, fill: '#6f6f6f' }}
             stroke="#dddddd"
-            width={34}
+            width={40}
           />
 
           {anomalies.map((a, index) => {
