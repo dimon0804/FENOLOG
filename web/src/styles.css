@@ -50,8 +50,15 @@
 }
 
 * { box-sizing: border-box; }
-html, body, #root { height: 100%; margin: 0; }
+html, body, #root { margin: 0; }
 
+/* Высота окна нигде не фиксируется жёстко.
+ *
+ * Раньше каркас был прибит к 100% высоты, и в невыгруженном на весь экран окне
+ * нижняя часть — блок источников и подпись сервиса — просто обрезалась, а
+ * прокрутить туда было нельзя: страница физически не была длиннее экрана.
+ * Теперь страница растёт по содержимому и прокручивается как обычная, а
+ * навигационная колонка остаётся на месте липкой. */
 body {
   background: var(--page);
   color: var(--ink);
@@ -59,6 +66,7 @@ body {
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
 }
 
 button { font: inherit; cursor: pointer; border: 0; background: none; color: inherit; }
@@ -69,14 +77,13 @@ input { font: inherit; }
 .shell {
   display: grid;
   grid-template-columns: var(--nav-width) 1fr;
-  height: 100%;
+  min-height: 100dvh;
 }
 
 .main {
-  display: grid;
-  grid-template-rows: auto 1fr;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
-  min-height: 0;
   padding: 0 18px 18px;
 }
 
@@ -84,12 +91,14 @@ input { font: inherit; }
 .canvas {
   background: var(--canvas);
   border-radius: 22px;
-  min-height: 0;
-  overflow: hidden;
+  flex: 1;
   display: flex;
   flex-direction: column;
 }
-.canvas.scroll { overflow-y: auto; padding: 26px 28px 28px; }
+/* Разделы со свободной вёрсткой прокручиваются вместе со страницей, а не
+   внутри себя: две вложенные полосы прокрутки — верный способ не найти нужное. */
+.canvas.scroll { padding: 26px 28px 28px; }
+
 
 /* ============================================================ тёмная колонка */
 
@@ -100,7 +109,14 @@ input { font: inherit; }
   flex-direction: column;
   padding: 22px 18px 18px;
   gap: 18px;
+  /* Липкая и во всю высоту окна: при прокрутке страницы навигация остаётся на
+     месте, а если сама не помещается — прокручивается внутри себя. */
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100dvh;
   overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 .nav-logo {
@@ -146,7 +162,12 @@ input { font: inherit; }
 }
 .nav-item.active .count { color: rgba(255, 255, 255, 0.85); }
 
-.nav-spacer { flex: 1; min-height: 18px; }
+.nav-spacer { flex: 1 1 auto; min-height: 18px; }
+
+/* Логотип, источники и подпись сжиматься не имеют права: во flex-колонке
+   они по умолчанию ужимаются до нечитаемого, вместо того чтобы включить
+   прокрутку. Именно так пропадала нижняя карточка в невысоком окне. */
+.nav-logo, .nav-card, .nav-foot, .nav-items { flex: none; }
 
 .nav-card {
   background: var(--nav-card);
@@ -200,11 +221,22 @@ input { font: inherit; }
   display: flex;
   align-items: center;
   gap: 14px;
+  flex-wrap: wrap;
   padding: 20px 10px 18px;
+  /* Липкая: в длинных разделах управление регионом и глубиной истории должно
+     оставаться под рукой, а не уезжать вверх. */
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--page);
 }
 .topbar h1 { margin: 0; font-size: 27px; font-weight: 800; letter-spacing: -0.02em; }
 .topbar .sub { font-size: 14px; color: var(--ink-soft); margin-top: 2px; }
-.topbar .spacer { flex: 1; }
+
+/* Заголовок сжимается и переносит подзаголовок на вторую строку, управление —
+   нет: лучше две строки текста, чем разорванный ряд кнопок. */
+.topbar-title { flex: 1 1 280px; min-width: 0; }
+.topbar-actions { display: flex; gap: 12px; flex: 0 0 auto; margin-left: auto; }
 
 .pill {
   display: inline-flex;
@@ -276,7 +308,9 @@ input { font: inherit; }
   background: var(--card);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 26px 26px 22px;
+  /* Справа отступ под декоративные полоски: без него длинная подпись вроде
+     «6 817,5 га под наблюдением» наезжает прямо на них. */
+  padding: 26px 62px 22px 26px;
   overflow: hidden;
   min-height: 300px;
   display: flex;
@@ -285,14 +319,16 @@ input { font: inherit; }
 .stat .glyph { margin-bottom: 22px; }
 .stat .label { font-size: 17px; color: var(--ink-soft); }
 .stat .value {
-  font-size: 68px;
+  /* Размер тянется за шириной окна, а не переключается ступеньками: «Сегодня»
+     в 68 пунктов не влезает в карточку узкого окна и вылезает за край. */
+  font-size: clamp(38px, 4.2vw, 68px);
   font-weight: 800;
   line-height: 1.02;
   letter-spacing: -0.03em;
   margin: auto 0 0;
 }
-.stat .value.word { font-size: 54px; }
-.stat .delta { margin-top: 14px; font-size: 16px; font-weight: 600; }
+.stat .value.word { font-size: clamp(30px, 3.3vw, 54px); }
+.stat .delta { margin-top: 14px; font-size: 15px; font-weight: 600; }
 .stat .stripes {
   position: absolute;
   top: 0;
@@ -375,7 +411,15 @@ input { font: inherit; }
 
 /* flex: 1 обязателен: без него экран карты сжимается по содержимому, и под
    ним остаётся пустая половина панели. */
-.map-screen { flex: 1; display: grid; grid-template-rows: minmax(300px, 52%) 1fr; min-height: 0; }
+/* Экран карты помещается в окно целиком: карта сверху, разбор снизу. Ниже
+   нижней границы он не сжимается — вместо этого прокручивается страница, и в
+   низком окне ничего не обрезается. */
+.map-screen {
+  display: grid;
+  grid-template-rows: minmax(240px, 52%) 1fr;
+  height: clamp(560px, calc(100dvh - 118px), 1200px);
+  min-height: 0;
+}
 .map-wrap { position: relative; min-height: 0; }
 .map { position: absolute; inset: 0; }
 
@@ -474,7 +518,10 @@ input { font: inherit; }
 
 /* ================================================================== таблица */
 
-.table { width: 100%; border-collapse: collapse; font-size: 14px; }
+/* Обёртка с боковой прокруткой: в узком окне таблица участков иначе просто
+   обрезается по краю карточки. */
+.table-wrap { overflow-x: auto; }
+.table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: 14px; }
 .table th {
   text-align: left;
   font-size: 11.5px;
@@ -490,9 +537,106 @@ input { font: inherit; }
 .table tr.sel td { background: var(--green-soft); }
 .table td.num { font-variant-numeric: tabular-nums; }
 
-@media (max-width: 1180px) {
-  :root { --nav-width: 240px; }
+/* ================================================================== адаптив */
+
+/* Ширины подобраны по реальным окнам, а не по круглым числам: 1440 — окно
+   ноутбука не на весь экран, 1200 — половина экрана рядом с другим окном,
+   1000 — узкое окно и планшет, 760 — телефон. */
+
+@media (max-width: 1440px) {
+  :root { --nav-width: 252px; }
+  .stat { min-height: 260px; }
+  .map-bottom { grid-template-columns: 1fr 320px; }
+}
+
+@media (max-width: 1200px) {
+  :root { --nav-width: 232px; }
+  .topbar h1 { font-size: 23px; }
+  .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Третья карточка занимает всю ширину — так ряд не разваливается на 2 + 1
+     с дырой справа. */
+  .stat-grid > :nth-child(3) { grid-column: 1 / -1; min-height: 200px; }
+  .quickstart .art { opacity: 0.5; right: -40px; }
+}
+
+@media (max-width: 1000px) {
+  /* Колонка навигации перестаёт быть колонкой: она уезжает наверх обычной
+     полосой, а разделы становятся горизонтальным рядом с прокруткой. Держать
+     её сбоку на такой ширине значит съесть четверть экрана под меню. */
+  .shell { grid-template-columns: 1fr; }
+  .nav {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    overflow-x: auto;
+  }
+  .nav-logo { flex-direction: row; gap: 10px; padding: 0; }
+  .nav-logo svg { width: 34px; height: 34px; }
+  .nav-items { flex-direction: row; gap: 4px; }
+  .nav-item { padding: 9px 13px; font-size: 14.5px; white-space: nowrap; }
+  .nav-item svg { display: none; }
+  /* Карточка источников уходит — её содержимое доступно по колокольчику в
+     шапке. Подпись сервиса остаётся: она отвечает на вопрос «что это вообще
+     открыто», и прятать её незачем. */
+  .nav-card { display: none; }
+  .nav-spacer { display: block; }
+  .nav-foot { padding: 7px 10px; }
+  .nav-foot .role { display: none; }
+
+  .main { padding: 0 12px 12px; }
+  .topbar { padding: 14px 4px 12px; }
+  .canvas.scroll { padding: 18px 16px 20px; }
   .stat-grid { grid-template-columns: 1fr; }
+  .stat-grid > :nth-child(3) { grid-column: auto; }
+  .stat { min-height: 190px; padding-right: 52px; }
   .map-bottom { grid-template-columns: 1fr; }
   .map-feed { border-left: 0; border-top: 1px solid var(--line); }
+  .map-screen { grid-template-rows: minmax(300px, 46%) 1fr; height: auto; }
+  .map-charts, .map-feed { overflow: visible; }
+  .map-wrap { height: 46vh; min-height: 300px; }
+  .popover { width: min(340px, calc(100vw - 32px)); }
+}
+
+/* Адаптив по высоте окна.
+ *
+ * Ширины мало: у ноутбука окно 1280x720, и в него колонка навигации целиком не
+ * влезала — источники и подпись сервиса уезжали за нижний край. Прокрутка
+ * внутри колонки их формально возвращает, но никто не догадается прокручивать
+ * меню, поэтому в невысоком окне колонка уплотняется, а не прячется. */
+
+@media (max-height: 880px) {
+  .nav { padding: 14px 14px; gap: 12px; }
+  .nav-logo { flex-direction: row; gap: 10px; padding: 2px 0 4px; }
+  .nav-logo svg { width: 38px; height: 38px; }
+  .nav-items { gap: 4px; }
+  .nav-item { padding: 10px 14px; font-size: 15px; }
+  .nav-card { padding: 12px 14px; }
+  .nav-card .head { margin-bottom: 8px; }
+  .source-row { padding: 5px 0; }
+  .source-row .when { display: none; }
+  .nav-foot { padding: 10px 12px; }
+}
+
+@media (max-height: 700px) {
+  .nav-logo .wordmark { font-size: 13px; }
+  .nav-item { padding: 8px 13px; font-size: 14.5px; }
+  /* Совсем низкое окно: от карточки источников остаётся только строка
+     состояния. Подробности по каждому источнику никуда не деваются — они в
+     колокольчике в шапке. */
+  .source-row { display: none; }
+  .nav-card .head { margin-bottom: 0; }
+}
+
+@media (max-width: 760px) {
+  .topbar h1 { font-size: 20px; }
+  .topbar .sub { display: none; }
+  .pill { height: 40px; padding: 0 12px; font-size: 13px; }
+  .quickstart { padding: 22px 20px; }
+  .quickstart h2 { font-size: 22px; }
+  .quickstart .art { display: none; }
+  .map-tools { top: 10px; left: 10px; gap: 6px; }
+  .btn { height: 38px; padding: 0 13px; font-size: 13px; }
 }

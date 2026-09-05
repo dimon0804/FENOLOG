@@ -33,6 +33,7 @@ export default function Fields({ summary, selectedId, onOpen, onRename, onDelete
 
   return (
     <div className="card" style={{ padding: '20px 8px' }}>
+      <div className="table-wrap">
       <table className="table">
         <thead>
           <tr>
@@ -140,6 +141,7 @@ export default function Fields({ summary, selectedId, onOpen, onRename, onDelete
           })}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }
