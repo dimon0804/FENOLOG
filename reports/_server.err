@@ -1,0 +1,13 @@
+INFO:     Started server process [62280]
+INFO:     Waiting for application startup.
+2026-09-05 19:20:53,022 INFO fenolog.api: норма по культурам на месте: C:\Users\Dmitry\Desktop\fenolog\models\crop_climatology.json
+2026-09-05 19:20:53,022 INFO fenolog.api: интерфейс: C:\Users\Dmitry\Desktop\fenolog\web\dist
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+2026-09-05 19:21:45,747 WARNING src.providers.satellite: satellite: каталог Microsoft Planetary Computer недоступен: HTTPSConnectionPool(host='planetarycomputer.microsoft.com', port=443): Max retries exceeded with url: /api/stac/v1 (Caused by SSLError(SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1010)')))
+2026-09-05 19:21:48,480 WARNING src.providers.satellite: satellite: каталог Microsoft Planetary Computer недоступен: HTTPSConnectionPool(host='planetarycomputer.microsoft.com', port=443): Read timed out. (read timeout=8)
+2026-09-05 19:21:50,252 WARNING src.core.agrolog: Журнал работ, запись 1: пропущена запись без разборчивой даты: {'что-то': 'непонятное'}
+2026-09-05 19:47:58,357 WARNING src.providers.satellite: satellite: каталог Microsoft Planetary Computer недоступен: HTTPSConnectionPool(host='planetarycomputer.microsoft.com', port=443): Read timed out. (read timeout=8)
+2026-09-05 19:47:58,357 WARNING src.providers.satellite: satellite: каталог Microsoft Planetary Computer недоступен: HTTPSConnectionPool(host='planetarycomputer.microsoft.com', port=443): Read timed out. (read timeout=8)
+2026-09-05 20:01:52,849 WARNING src.providers.satellite: satellite: каталог Microsoft Planetary Computer недоступен: HTTPSConnectionPool(host='planetarycomputer.microsoft.com', port=443): Read timed out. (read timeout=8)
+2026-09-05 20:14:02,915 WARNING src.providers.satellite: satellite: каталог Microsoft Planetary Computer недоступен: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))

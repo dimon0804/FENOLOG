@@ -44,7 +44,7 @@ def _providers(offline: bool):
     Здесь как раз то место, где слои соединяются.
     """
     if offline:
-        return None, None
+        return None, None, None
 
     def fetch(geometry, start, end):
         from src.providers.satellite import fetch_observations
@@ -56,7 +56,12 @@ def _providers(offline: bool):
 
         return find_parcels(bbox, limit=30)
 
-    return fetch, parcels
+    def cropland(geometry):
+        from src.providers.cropland import cropland_fraction
+
+        return cropland_fraction(geometry)
+
+    return fetch, parcels, cropland
 
 
 def main(argv=None) -> int:
@@ -82,8 +87,9 @@ def main(argv=None) -> int:
     else:
         ap.error("укажите --polygon-file или пару --lon/--lat")
 
-    fetch, parcels = _providers(args.offline)
+    fetch, parcels, cropland = _providers(args.offline)
     res = verify_polygon(geometry, fetch_observations=fetch, find_parcels=parcels,
+                         cropland_mask=cropland,
                          years=args.years, check_shift=args.deep)
 
     if args.json:
@@ -114,6 +120,16 @@ def main(argv=None) -> int:
               f"{'  (подтверждено)' if m['matched'] else ''}")
         if m.get("crop_hint"):
             print(f"  культура по карте     {m['crop_hint']}")
+
+    if res["cropland"]:
+        c = res["cropland"]
+        print()
+        print("МАСКА ПАШНИ (ESA WorldCereal 2021)")
+        if c["fraction"] is None:
+            print(f"  {c['status']}")
+        else:
+            print(f"  доля пашни в контуре  {c['fraction']:.0%}")
+            print(f"  пикселей 10 м         {c['pixels']}")
 
     if res["shift"]:
         sh = res["shift"]

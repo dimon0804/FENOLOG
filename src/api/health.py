@@ -53,6 +53,14 @@ _SOURCES = [
         "degraded": "Готовые контуры не подскажутся, полигон можно нарисовать вручную",
     },
     {
+        "key": "cropland",
+        "title": "Маска пашни",
+        "detail": "ESA WorldCereal через публичный TiTiler Terrascope",
+        "required": False,
+        "degraded": "Координаты поля будут проверены снимком и картой, но без "
+                    "независимого подтверждения по маске пахотных земель",
+    },
+    {
         "key": "geocoder",
         "title": "Поиск региона",
         "detail": "Nominatim",
@@ -81,6 +89,10 @@ def _probe(key: str) -> bool:
             from src.providers import parcels
 
             return parcels.is_available()
+        if key == "cropland":
+            from src.providers import cropland
+
+            return cropland.is_available()
         if key == "geocoder":
             from src.api import geocoding
 

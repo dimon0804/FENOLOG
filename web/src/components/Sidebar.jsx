@@ -173,5 +173,6 @@ const SOURCE_TITLES = {
   satellite: 'Planetary Computer',
   weather: 'Open-Meteo',
   parcels: 'OpenStreetMap',
+  cropland: 'ESA WorldCereal',
   geocoder: 'Nominatim',
 }
