@@ -245,18 +245,81 @@ def _jsonable(value):
     return str(value)
 
 
+def summarize(payload: dict) -> dict:
+    """Выжимка из разбора: то, что нужно сводке и списку участков.
+
+    Полный разбор весит сотни килобайт — это ряд за пять сезонов посуточно.
+    Складывать их все в одну сводку значило бы гонять по сети мегабайты ради
+    трёх чисел, поэтому выжимка считается один раз при сохранении и лежит
+    отдельным маленьким файлом.
+    """
+    anomalies = payload.get("anomalies") or []
+    series = payload.get("series") or []
+    observed = sum(1 for p in series if not p.get("is_restored"))
+    zscores = [a.get("min_zscore") for a in anomalies if a.get("min_zscore") is not None]
+    meta = payload.get("meta") or {}
+    return {
+        "anomalies": len(anomalies),
+        "critical": sum(1 for a in anomalies if a.get("severity") == "critical"),
+        "suppression": sum(1 for a in anomalies if a.get("severity") == "suppression"),
+        # Худшее отклонение по полю — по нему список участков сортируется:
+        # агроному нужно сразу видеть, где хуже всего.
+        "worst_zscore": min(zscores) if zscores else None,
+        "series_points": len(series),
+        "observations": observed,
+        "climatology_source": meta.get("climatology_source"),
+        "date_from": meta.get("date_from"),
+        "date_to": meta.get("date_to"),
+        "sources": meta.get("sources") or {},
+        "failures": meta.get("failures") or [],
+        "last_anomaly": anomalies[0].get("end") if anomalies else None,
+    }
+
+
 def _save_result(polygon_id: str, payload: dict) -> None:
     """Сохранить последний результат по участку рядом с полигонами."""
     try:
         RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-        path = RESULTS_DIR / f"{polygon_id}.json"
-        tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-        tmp.replace(path)
+        for name, data in (
+            (f"{polygon_id}.json", payload),
+            (f"{polygon_id}.summary.json", summarize(payload)),
+        ):
+            path = RESULTS_DIR / name
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            tmp.replace(path)
     except OSError as exc:
         # Кэш результата — удобство, а не обязательство: не сохранилось, значит
         # при следующем открытии поля будет новый сбор.
         log.warning("не удалось сохранить результат по %s: %s", polygon_id, exc)
+
+
+def load_summary(polygon_id: str) -> dict | None:
+    """Выжимка по участку. None — участок ещё не анализировался.
+
+    Если выжимки нет, а полный разбор есть — считаем и дописываем. Так разборы,
+    сделанные до появления выжимок, не превращаются в «поле не анализировалось»
+    и пользователю не приходится пересчитывать их заново.
+    """
+    path = RESULTS_DIR / f"{polygon_id}.summary.json"
+    if path.exists():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    payload = load_result(polygon_id)
+    if payload is None:
+        return None
+    digest = summarize(payload)
+    try:
+        RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(digest, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(path)
+    except OSError:
+        pass
+    return digest
 
 
 def load_result(polygon_id: str) -> dict | None:
@@ -272,10 +335,11 @@ def load_result(polygon_id: str) -> dict | None:
 
 def drop_result(polygon_id: str) -> None:
     """Удалить сохранённый результат вместе с самим участком."""
-    try:
-        (RESULTS_DIR / f"{polygon_id}.json").unlink(missing_ok=True)
-    except OSError:
-        pass
+    for name in (f"{polygon_id}.json", f"{polygon_id}.summary.json"):
+        try:
+            (RESULTS_DIR / name).unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 manager = TaskManager()
