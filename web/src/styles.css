@@ -1208,7 +1208,10 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
   /* Нижний отступ намеренно велик: в макете число с подписью стоят примерно на
      двух третях высоты карточки, а не прижаты к её низу. */
   .stat { min-height: clamp(320px, 46dvh, 500px); padding: 34px 92px 76px 30px; }
-  .stat .glyph { margin-bottom: 34px; }
+  /* Значок в макете крупный — 84 пункта, а не 58: рядом с числом в 84 пункта
+     мелкая иконка выглядит случайной. */
+  .stat .glyph { margin-bottom: 30px; }
+  .stat .glyph svg { width: 84px; height: 84px; }
   .stat .label { font-size: 18px; }
   .stat .value { font-size: clamp(48px, 4.4vw, 84px); }
   .stat .value.word { font-size: clamp(38px, 3.4vw, 64px); }
