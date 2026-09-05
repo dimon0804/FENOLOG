@@ -73,15 +73,41 @@ def _analyse_one(args, pid: str, label: str) -> tuple[bool, float, dict]:
     return status == "done", took, siblings
 
 
+def _existing_by_external(api: str) -> dict[str, str]:
+    """Уже сохранённые участки по их идентификатору в OpenStreetMap.
+
+    Без этого повторный прогрев района заводит вторую копию каждого поля: скрипт
+    запускают не один раз, и база быстро зарастает участками с одинаковым именем.
+    Проверено на себе — «Участок 1» успел размножиться в трёх экземплярах.
+    """
+    try:
+        found = _call(api, "/api/polygons", timeout=30)
+    except Exception:  # noqa: BLE001
+        return {}
+    out: dict[str, str] = {}
+    for polygon in found.get("polygons", []):
+        ext = polygon.get("external_id")
+        if ext:
+            out[ext] = polygon["id"]
+    return out
+
+
 def _run_pass(args, targets: list[dict], ids: dict[int, str]) -> tuple[int, int, int]:
     """Один проход по району: сохранить (только на первом) и разобрать."""
     saved = analysed = failed = 0
+    known = _existing_by_external(args.api)
 
     for i, parcel in enumerate(targets, 1):
         name = parcel.get("name") or f"Участок {i}"
         label = f"[{i}/{len(targets)}] {name[:30]}"
 
         pid = ids.get(i)
+        if pid is None and parcel.get("id"):
+            # Тот же контур мог быть сохранён прошлым запуском — берём его,
+            # а не заводим копию.
+            pid = known.get(parcel["id"])
+            if pid:
+                ids[i] = pid
         if pid is None:
             try:
                 polygon = _call(args.api, "/api/polygons", {
