@@ -557,12 +557,32 @@ input { font: inherit; }
 @media (max-width: 1200px) {
   :root { --nav-width: 232px; }
   .topbar h1 { font-size: 23px; }
-  .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-  /* Третья карточка занимает всю ширину — так ряд не разваливается на 2 + 1
-     с дырой справа. */
-  .stat-grid > :nth-child(3) { grid-column: 1 / -1; }
-  .stat { min-height: 200px; padding-right: 54px; }
   .quickstart .art { opacity: 0.5; right: -40px; }
+
+  /* Карточки показателей разворачиваются в строки: значок слева, подпись и
+     число посередине, изменение справа.
+     Двухколоночная ступень была здесь раньше и оказалась худшим из вариантов —
+     три карточки не делятся на два, третья уезжала во всю ширину вторым рядом,
+     и блок становился вдвое выше именно там, где высоты и так не хватает.
+     Три строки по девяносто пикселей занимают меньше места, чем один ряд
+     вертикальных карточек, и читаются не хуже. */
+  .stat-grid { grid-template-columns: 1fr; gap: 12px; }
+  .stat {
+    min-height: 0;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: 'glyph label delta' 'glyph value delta';
+    align-items: center;
+    gap: 2px 18px;
+    padding: 16px 46px 16px 20px;
+  }
+  .stat .glyph { grid-area: glyph; margin: 0; }
+  .stat .glyph svg { width: 44px; height: 44px; }
+  .stat .label { grid-area: label; font-size: 14.5px; align-self: end; }
+  .stat .value { grid-area: value; font-size: 34px; margin: 0; align-self: start; }
+  .stat .value.word { font-size: 27px; }
+  .stat .delta { grid-area: delta; margin: 0; font-size: 13px; text-align: right; }
+  .stat .stripes { right: 16px; gap: 4px; }
 }
 
 @media (max-width: 1000px) {
@@ -611,28 +631,11 @@ input { font: inherit; }
 }
 
 @media (max-width: 780px) {
-  /* В одну колонку карточка показателя разворачивается в строку: значок
-     слева, подпись и число посередине, изменение справа. Вертикальная
-     карточка во всю ширину — это триста пикселей пустоты вокруг одной
-     цифры. */
-  .stat-grid { grid-template-columns: 1fr; gap: 12px; }
-  .stat-grid > :nth-child(3) { grid-column: auto; }
-  .stat {
-    min-height: 0;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    grid-template-areas: 'glyph label delta' 'glyph value delta';
-    align-items: center;
-    gap: 4px 16px;
-    padding: 16px 46px 16px 18px;
-  }
-  .stat .glyph { grid-area: glyph; margin: 0; }
-  .stat .glyph svg { width: 42px; height: 42px; }
-  .stat .label { grid-area: label; font-size: 14px; align-self: end; }
-  .stat .value { grid-area: value; font-size: 34px; margin: 0; align-self: start; }
-  .stat .value.word { font-size: 26px; }
-  .stat .delta { grid-area: delta; margin: 0; font-size: 12.5px; text-align: right; }
-  .stat .stripes { right: 14px; gap: 4px; }
+  .stat { padding: 14px 38px 14px 16px; }
+  .stat .glyph svg { width: 38px; height: 38px; }
+  .stat .value { font-size: 30px; }
+  .stat .value.word { font-size: 24px; }
+  .stat .delta { font-size: 12px; }
 
   .topbar h1 { font-size: 20px; }
   .topbar .sub { display: none; }
@@ -644,12 +647,40 @@ input { font: inherit; }
   .btn { height: 38px; padding: 0 13px; font-size: 13px; }
 }
 
-/* Адаптив по высоте окна.
- *
- * Ширины мало: у ноутбука окно 1280x720, и в него колонка навигации целиком не
- * влезала — источники и подпись сервиса уезжали за нижний край. Прокрутка
- * внутри колонки их формально возвращает, но никто не догадается прокручивать
- * меню, поэтому в невысоком окне колонка уплотняется, а не прячется. */
+@media (max-height: 820px) {
+  .topbar { padding: 14px 10px 12px; }
+  .canvas.scroll { padding: 18px 20px 20px; }
+}
+
+@media (min-width: 1201px) and (max-height: 820px) {
+  .stat { min-height: 196px; padding-top: 20px; padding-bottom: 18px; }
+  .stat .glyph { margin-bottom: 10px; }
+  .stat .glyph svg { width: 46px; height: 46px; }
+  .stat .label { font-size: 15px; }
+  .stat .delta { margin-top: 10px; font-size: 14px; }
+  .stat-grid { gap: 16px; }
+  .quickstart { min-height: 0; margin-top: 16px; padding: 24px 28px; }
+  .quickstart h2 { font-size: 23px; margin-bottom: 6px; }
+  .quickstart p { margin-bottom: 14px; font-size: 14px; }
+  .quickstart .art { height: 120px; }
+  .card + .card { margin-top: 14px; }
+}
+
+@media (min-width: 1201px) and (max-height: 700px) {
+  .stat { min-height: 168px; }
+  .stat .glyph svg { width: 40px; height: 40px; }
+  .stat .value { font-size: clamp(34px, 3.6vw, 54px); }
+  .stat .value.word { font-size: clamp(26px, 2.8vw, 42px); }
+}
+
+@media (max-height: 700px) {
+  .stat-grid { gap: 10px; }
+  .stat { padding-top: 12px; padding-bottom: 12px; }
+  .quickstart { margin-top: 12px; padding: 18px 22px; }
+  .quickstart h2 { font-size: 21px; }
+  .quickstart p { margin-bottom: 12px; }
+  .quickstart .art { height: 100px; }
+}
 
 @media (max-height: 880px) {
   .nav { padding: 14px 14px; gap: 12px; }
