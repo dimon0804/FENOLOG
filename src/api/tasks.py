@@ -159,6 +159,7 @@ class TaskManager:
                 years=years,
                 progress=lambda stage, done, total: self._progress(task, stage, done, total),
                 max_scenes=max_scenes,
+                use_neighbours=config.USE_NEIGHBOURS,
             )
 
             # Собственные этапы вокруг вызова ядра. Ради них сбор и анализ здесь
