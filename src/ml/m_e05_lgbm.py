@@ -424,6 +424,29 @@ def _normalise_points(points: list, views: dict[str, PolygonView]) -> list:
     return out
 
 
+def save_model(method: "_LGBMStack", path: Path = FINAL_MODEL_PATH) -> Path:
+    """Кладёт обученную модель на диск в том виде, который читает from_saved.
+
+    Раньше файл `models/e05_lgbm.pkl` не создавался ни одной командой
+    репозитория — он появился однажды и дальше жил сам по себе. Для критерия
+    воспроизводимости это дыра: артефакт нельзя пересобрать. Теперь можно,
+    вызовом `python -m src.cli.batch_infer --retrain --save-model`.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    blob = {
+        "booster": method.model,
+        "feats": list(method.feats),
+        "crop_map": dict(method.crop_map or {}),
+        "anchor": method.anchor,
+        "anchor_col": method.anchor_col,
+        "params": dict(method.params),
+    }
+    with open(path, "wb") as f:
+        pickle.dump(blob, f, protocol=4)
+    return path
+
+
 def from_saved(path: Path = FINAL_MODEL_PATH) -> "_LGBMStack":
     """Готовый к predict_external метод из models/e05_lgbm.pkl, без обучения."""
     blob = load_model(path)

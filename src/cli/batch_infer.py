@@ -32,7 +32,10 @@ from src.ml.registry import REGISTRY, discover
 
 # Значение-заглушка на случай, если у полигона вообще нет известных наблюдений
 FALLBACK_NDVI = 0.31
-DEFAULT_METHOD = "sibw3"
+# Метод по умолчанию — итоговая конфигурация решения. Раньше здесь стоял
+# промежуточный вариант, и запуск без флага давал файл хуже заявленного:
+# способ случайно сдать не тот результат, которым нельзя разбрасываться.
+DEFAULT_METHOD = "e05_lgbm"
 
 
 def build_targets(df: pd.DataFrame) -> list[HoldoutPoint]:
@@ -99,7 +102,39 @@ def _fit_on_local_holdout(method, seed: int = SEED):
     return len(points_v)
 
 
-def build_submission(df: pd.DataFrame, method_key: str = DEFAULT_METHOD) -> pd.DataFrame:
+def _saved_path(method):
+    """Путь к сохранённой модели метода, если он такую поддерживает."""
+    import sys as _sys
+
+    module = _sys.modules.get(type(method).__module__)
+    return getattr(module, "FINAL_MODEL_PATH", None)
+
+
+def _load_saved(method):
+    """Готовая модель метода с диска либо None.
+
+    Механизм намеренно общий: метод объявляет у себя `from_saved()` и
+    `FINAL_MODEL_PATH`, и этого достаточно. Так следующий обучаемый метод
+    получит то же поведение, не трогая этот файл.
+    """
+    import sys as _sys
+
+    module = _sys.modules.get(type(method).__module__)
+    loader = getattr(module, "from_saved", None)
+    path = getattr(module, "FINAL_MODEL_PATH", None)
+    if loader is None or path is None or not Path(path).exists():
+        return None
+    try:
+        return loader(path)
+    except Exception as exc:  # noqa: BLE001
+        # Битый или несовместимый файл модели не должен ронять инференс:
+        # честнее переобучить и сказать об этом, чем упасть.
+        print(f"Готовую модель прочитать не удалось ({type(exc).__name__}), переобучаю")
+        return None
+
+
+def build_submission(df: pd.DataFrame, method_key: str = DEFAULT_METHOD,
+                     retrain: bool = False, save_model: bool = False) -> pd.DataFrame:
     """Восстанавливает все контрольные точки выбранным методом из реестра."""
     discover()
     if method_key not in REGISTRY:
@@ -116,10 +151,26 @@ def build_submission(df: pd.DataFrame, method_key: str = DEFAULT_METHOD) -> pd.D
     context: dict = {"df": df, "points": points}
 
     if method.needs_fit:
-        # Обучаемый метод: сначала учим на локальном контрольном наборе, где есть
-        # ответы, потом считаем признаки уже по боевым точкам и предсказываем.
-        n_train = _fit_on_local_holdout(method)
-        print(f"Метод обучаемый: обучен на {n_train} точках локального контроля")
+        # Обучаемый метод. Если рядом лежит сохранённая модель — берём её, и
+        # тогда результат воспроизводится побитово, а эксперт не ждёт двадцать
+        # минут переобучения. Обучение остаётся запасным путём: нет файла или
+        # запрошен --retrain.
+        loaded = None if retrain else _load_saved(method)
+        if loaded is not None:
+            method = loaded
+            print(f"Метод обучаемый: взята готовая модель {_saved_path(method)}")
+        else:
+            n_train = _fit_on_local_holdout(method)
+            print(f"Метод обучаемый: обучен на {n_train} точках локального контроля")
+            if save_model:
+                import sys as _sys
+
+                module = _sys.modules.get(type(method).__module__)
+                saver = getattr(module, "save_model", None)
+                if saver is None:
+                    print("Метод не умеет сохранять модель — пропускаю")
+                else:
+                    print(f"Модель сохранена: {saver(method)}")
         context["base_preds"] = _stateless_predictions(points, views, context)
         if not hasattr(method, "predict_external"):
             raise SystemExit(
@@ -164,6 +215,10 @@ def main() -> None:
                         help="не подмешивать наблюдения train_dataset (на метрику не влияет, "
                              "но влияет на объём истории для климатологии)")
     parser.add_argument("--list-methods", action="store_true", help="показать доступные методы")
+    parser.add_argument("--retrain", action="store_true",
+                        help="переобучить модель с нуля, не беря готовую из models/")
+    parser.add_argument("--save-model", action="store_true",
+                        help="сохранить переобученную модель в models/ (только с --retrain)")
     args = parser.parse_args()
 
     if args.list_methods:
@@ -185,7 +240,8 @@ def main() -> None:
         df["is_synthetic_gap"] = df["is_synthetic_gap"].fillna(False).astype(bool)
     df = df.sort_values(["anon_polygon_id", "_ord"]).reset_index(drop=True)
 
-    sub = build_submission(df, method_key=args.method)
+    sub = build_submission(df, method_key=args.method, retrain=args.retrain,
+                           save_model=args.save_model)
     validate(sub, expected)
 
     out = Path(args.output)

@@ -67,7 +67,11 @@ def _analyse_one(args, pid: str, label: str) -> tuple[bool, float, dict]:
     if status == "done":
         try:
             res = _call(args.api, f"/api/polygons/{pid}/result", timeout=30)
-            siblings = (res.get("meta") or {}).get("siblings") or {}
+            # Ручка заворачивает разбор в поле result, meta лежит внутри него.
+            # Читал верхний уровень — и отчёт молча показывал пустоту там, где
+            # поправка на самом деле применялась.
+            meta = (res.get("result") or {}).get("meta") or res.get("meta") or {}
+            siblings = meta.get("siblings") or {}
         except Exception:  # noqa: BLE001
             pass
     return status == "done", took, siblings

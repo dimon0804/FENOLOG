@@ -109,6 +109,22 @@ export const FIELD_STATE_ORDER = ['ok', 'watch', 'bad', 'nodata']
 export function fieldState(digest) {
   if (!digest) return 'nodata'
   if (digest.climatology_source === 'none' || !digest.climatology_source) return 'nodata'
+
+  // Цвет поля на карте отвечает на вопрос «что с ним СЕЙЧАС», поэтому берётся
+  // состояние на последних данных. Счётчики critical/suppression — это вся
+  // история за все сезоны: по ним поле, у которого одна плохая неделя была два
+  // года назад, красилось красным навсегда, и вся карта уходила в красный.
+  const current = digest.current
+  if (current && current.severity) {
+    if (current.severity === 'critical') return 'bad'
+    if (current.severity === 'suppression') return 'watch'
+    return 'ok'
+  }
+  // Состояние неизвестно: нет z-оценки или последние данные вне сезона.
+  // Прошлые аномалии в этом случае ничего не говорят о сегодняшнем дне.
+  if (current && current.reason) return 'nodata'
+
+  // Запасной путь для разборов, сохранённых до появления поля current.
   if (digest.critical > 0) return 'bad'
   if (digest.suppression > 0) return 'watch'
   return 'ok'
