@@ -27,6 +27,7 @@ import logging
 import math
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import TimeoutError as FuturesTimeout
 from datetime import date
 
 import numpy as np
@@ -174,24 +175,33 @@ def daily_correction(
     pool = ThreadPoolExecutor(max_workers=min(6, max(len(queue), 1)))
     try:
         futures = {pool.submit(fetch_observations, n["geometry"], start, end): n for n in queue}
-        for fut in as_completed(futures):
-            try:
-                res = _residuals(fut.result())
-            except Exception:  # noqa: BLE001
-                res = {}
-            if res:
-                tables.append(res)
-            done += 1
-            if progress:
+        # Бюджет времени задаётся самому ожиданию, а не проверяется между
+        # завершениями. Разница принципиальна: проверка в теле цикла срабатывает
+        # только когда очередной сосед досчитался, и один медленный источник
+        # держит разбор сколько угодно долго, ни разу не дав циклу провернуться.
+        # Замерено на холодном районе: сбор шёл тринадцать минут при бюджете
+        # в две с половиной.
+        try:
+            left = max(TIME_BUDGET_S - (time.perf_counter() - t0), 1.0)
+            for fut in as_completed(futures, timeout=left):
                 try:
-                    progress("собираю соседние поля", done, len(queue))
+                    res = _residuals(fut.result())
                 except Exception:  # noqa: BLE001
-                    pass
-            # Бюджет времени проверяется здесь и действительно останавливает
-            # работу: отменяем то, что ещё не начато, и уходим с тем, что есть.
-            if time.perf_counter() - t0 > TIME_BUDGET_S:
-                info["reason"] = "бюджет времени исчерпан, поправка по собранным"
-                break
+                    res = {}
+                if res:
+                    tables.append(res)
+                done += 1
+                if progress:
+                    try:
+                        progress("собираю соседние поля", done, len(queue))
+                    except Exception:  # noqa: BLE001
+                        pass
+                if time.perf_counter() - t0 > TIME_BUDGET_S:
+                    info["reason"] = "бюджет времени исчерпан, поправка по собранным"
+                    break
+        except FuturesTimeout:
+            # Штатный исход, а не сбой: уходим с теми соседями, что успели.
+            info["reason"] = "бюджет времени исчерпан, поправка по собранным"
     finally:
         pool.shutdown(wait=False, cancel_futures=True)
 
