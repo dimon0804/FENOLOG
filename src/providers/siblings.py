@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from concurrent.futures import TimeoutError as FuturesTimeout
@@ -52,7 +53,7 @@ MIN_NEIGHBOURS = 3
 
 # Потолок времени на сбор соседей. Если источники тормозят, лучше отдать разбор
 # без поправки, чем заставить пользователя ждать вдвое дольше.
-TIME_BUDGET_S = 150.0
+TIME_BUDGET_S = float(os.environ.get("FENOLOG_SIBLINGS_BUDGET", "150"))
 
 # Сколько соседей разрешено качать из сети за один разбор. Остальные берутся
 # только из кэша. Смысл: первый разбор в новом районе не должен стоить семь
@@ -158,7 +159,22 @@ def daily_correction(
             break
 
     if len(neighbours) < MIN_NEIGHBOURS:
-        info["reason"] = f"соседей найдено {len(neighbours)}, нужно {MIN_NEIGHBOURS}"
+        # Пустой ответ Overpass значит одно из двух: в районе действительно нет
+        # сельхозконтуров или источник промолчал. Для пользователя это разные
+        # новости — во втором случае имеет смысл повторить. Тот же разбор уже
+        # сделан в поиске контуров на карте, здесь он просто не был доведён.
+        alive = True
+        try:
+            from src.providers import parcels as _parcels
+
+            alive = _parcels.is_available()
+        except Exception:  # noqa: BLE001 — проверка живости не должна ронять разбор
+            pass
+        if not neighbours and not alive:
+            info["reason"] = "источник контуров не ответил, соседей не запросить"
+            info["source_down"] = True
+        else:
+            info["reason"] = f"соседей найдено {len(neighbours)}, нужно {MIN_NEIGHBOURS}"
         return {}, info
 
     # Соседи делятся на две очереди. Те, что уже лежат в кэше, достаются
@@ -214,11 +230,19 @@ def daily_correction(
                     except Exception:  # noqa: BLE001
                         pass
                 if time.perf_counter() - t0 > TIME_BUDGET_S:
-                    info["reason"] = "бюджет времени исчерпан, поправка по собранным"
+                    info["reason"] = (
+                "не хватило времени на сбор соседей"
+                if not tables
+                else "бюджет времени исчерпан, поправка по собранным"
+            )
                     break
         except FuturesTimeout:
             # Штатный исход, а не сбой: уходим с теми соседями, что успели.
-            info["reason"] = "бюджет времени исчерпан, поправка по собранным"
+            info["reason"] = (
+                "не хватило времени на сбор соседей"
+                if not tables
+                else "бюджет времени исчерпан, поправка по собранным"
+            )
     finally:
         pool.shutdown(wait=False, cancel_futures=True)
 
