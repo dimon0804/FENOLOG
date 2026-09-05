@@ -1028,7 +1028,7 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
 .kpi .note.muted { color: var(--ink-soft); font-weight: 500; }
 /* Мини-график прижат к низу карточки: иначе у карточек с разной длиной подписи
    он встаёт на разной высоте, и ряд перестаёт читаться как ряд. */
-.kpi .spark { margin-top: auto; padding-top: 10px; }
+.kpi .spark { margin-top: auto; padding-top: 10px; height: 56px; }
 
 .analytics-row {
   display: grid;
@@ -1040,6 +1040,7 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
 .analytics-row .card + .card { margin-top: 0; }
 
 .zones { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+.donut { width: 140px; height: 140px; flex: none; }
 .zone-legend { flex: 1; min-width: 150px; display: flex; flex-direction: column; gap: 14px; }
 .zone-row { display: flex; align-items: center; gap: 10px; font-size: 14px; }
 .zone-row .dot { width: 12px; height: 12px; }
@@ -1175,6 +1176,93 @@ a.btn { text-decoration: none; color: inherit; cursor: pointer; }
   .map-region select { min-width: 0; height: 40px; font-size: 14px; padding: 0 34px 0 12px; }
   .map-hint { font-size: 12.5px; max-width: calc(100% - 140px); }
   .btn { height: 38px; padding: 0 13px; font-size: 13px; }
+}
+
+/* Крупные экраны: масштаб по макету.
+ *
+ * Макеты нарисованы в 1920×1080, и на такой ширине интерфейс должен выглядеть
+ * так же просторно: колонка шире, строки выше, шрифты крупнее. Ниже 1441 всё
+ * остаётся как было — там места нет, и увеличенный набор ломал бы вёрстку.
+ * Отдельным блоком, а не правкой базовых значений, ровно поэтому: узкие окна
+ * не должны пострадать от подгонки под большой макет. */
+
+@media (min-width: 1441px) {
+  :root { --nav-width: 356px; }
+
+  .nav { padding: 26px 22px 22px; gap: 20px; }
+  .nav-item { padding: 15px 18px; font-size: 17px; gap: 15px; }
+  .nav-logo { padding: 8px 0 18px; }
+  .nav-logo .wordmark { font-size: 16px; }
+  .nav-card { padding: 16px 18px; }
+  .nav-card .head b { font-size: 14.5px; }
+  .source-row { padding: 8px 0; }
+  .source-row .name { font-size: 14px; }
+  .nav-foot { padding: 13px 15px; }
+  .nav-foot .who { font-size: 14.5px; }
+
+  .topbar h1 { font-size: 32px; }
+  .topbar .sub { font-size: 15px; }
+  .canvas.scroll { padding: 30px 32px 32px; }
+
+  /* «Обзор» */
+  /* Нижний отступ намеренно велик: в макете число с подписью стоят примерно на
+     двух третях высоты карточки, а не прижаты к её низу. */
+  .stat { min-height: clamp(320px, 46dvh, 500px); padding: 34px 92px 76px 30px; }
+  .stat .glyph { margin-bottom: 34px; }
+  .stat .label { font-size: 18px; }
+  .stat .value { font-size: clamp(48px, 4.4vw, 84px); }
+  .stat .value.word { font-size: clamp(38px, 3.4vw, 64px); }
+  .stat .delta { font-size: 16px; }
+  /* Высота нижнего ряда задана явно: карточки показателей на большом экране
+     занимают почти половину высоты, и ряд под ними должен уложиться в остаток,
+     а не выталкивать экран в прокрутку. Список активности внутри при нехватке
+     места прокручивается сам — полный перечень всё равно в «Участках». */
+  .overview-bottom {
+    gap: 24px;
+    margin-top: 24px;
+    height: clamp(300px, calc(100dvh - 716px), 384px);
+  }
+  .activity { min-height: 0; }
+  .activity-list { overflow-y: auto; min-height: 0; scrollbar-width: thin; }
+  .quickstart { padding: 40px 42px; }
+  .quickstart h2 { font-size: 34px; margin-bottom: 12px; }
+  .quickstart p { font-size: 17px; margin-bottom: 26px; max-width: 480px; }
+  .quickstart .pick { width: min(360px, 100%); margin-bottom: 20px; }
+  .quickstart .pick-btn, .btn.go { height: 52px; font-size: 15px; }
+  .activity { padding: 28px 32px; }
+  .activity h2 { font-size: 32px; margin-bottom: 10px; }
+  .activity-row { padding: 9px 8px; }
+  .activity-row .name { font-size: 16px; }
+  .activity-row .what { font-size: 13px; }
+  .activity-row .when { font-size: 14.5px; }
+
+  /* «Участки» */
+  .fields-bar { gap: 16px; margin-bottom: 20px; }
+  .search, .select, .btn.add { height: 50px; font-size: 15px; }
+  .search { max-width: 440px; }
+  .table-card .table { font-size: 16px; }
+  .table-card .table thead th { padding: 22px 22px 20px; font-size: 16px; }
+  .fields-table td { padding: 16px 22px; }
+  .fields-table .who { gap: 18px; }
+  .fields-table .name { font-size: 18px; }
+  .fields-table .small { font-size: 13.5px; }
+  .status { min-width: 150px; padding: 11px 18px; font-size: 15px; }
+  .table-foot { padding: 38px 22px; font-size: 19px; }
+
+  /* «Аналитика» */
+  .kpi-grid { gap: 20px; }
+  .kpi { padding: 24px 28px 18px; min-height: 290px; }
+  .kpi .label { font-size: 17px; }
+  .kpi .value { font-size: clamp(40px, 3.4vw, 62px); margin-top: 10px; }
+  .kpi .note { font-size: 15px; margin-top: 10px; }
+  .kpi .spark { padding-top: 14px; height: 92px; }
+  .donut { width: 208px; height: 208px; }
+  .analytics-row { gap: 22px; margin-top: 22px; }
+  .analytics-row .card h3 { font-size: 19px; }
+  .zones { gap: 30px; }
+  .zone-legend { gap: 20px; }
+  .zone-row { font-size: 17px; gap: 14px; }
+  .zone-row .dot { width: 15px; height: 15px; }
 }
 
 @media (max-height: 820px) {

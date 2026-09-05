@@ -16,6 +16,10 @@ import Thumb from './Thumb.jsx'
  * конкретное поле по имени иначе нечем.
  */
 export default function Fields({ summary, selectedId, onOpen, onRename, onDelete, onAnalyze, onGoMap }) {
+  // Размер миниатюры не может задаваться стилями: тайлы сдвигаются на
+  // вычисленное число пикселей, и масштабирование средствами CSS сдвинуло бы
+  // кадр мимо поля. Поэтому широкий экран спрашиваем напрямую.
+  const wide = useMedia('(min-width: 1441px)')
   const [query, setQuery] = useState('')
   const [crop, setCrop] = useState('')
   const [status, setStatus] = useState('')
@@ -117,7 +121,7 @@ export default function Fields({ summary, selectedId, onOpen, onRename, onDelete
                   >
                     <td>
                       <div className="who">
-                        <Thumb center={field.center} areaHa={field.area_ha} size={54} />
+                        <Thumb center={field.center} areaHa={field.area_ha} size={wide ? 68 : 54} />
                         {editing === field.id ? (
                           <form
                             onClick={(event) => event.stopPropagation()}
@@ -151,8 +155,8 @@ export default function Fields({ summary, selectedId, onOpen, onRename, onDelete
                         )}
                       </div>
                     </td>
-                    <td className="small col-crop">
-                      {field.crop_type || <span className="muted">не указана</span>}
+                    <td className="col-crop">
+                      {field.crop_type || <span className="muted small">не указана</span>}
                     </td>
                     <td className="num">{field.area_ha} га</td>
                     <td>
@@ -253,6 +257,21 @@ function RowMenu({ field, onOpen, onAnalyze, onRename, onDelete }) {
       )}
     </div>
   )
+}
+
+/** Следит за медиавыражением: нужен там, где размер нельзя отдать стилям. */
+function useMedia(query) {
+  const [matches, setMatches] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(query).matches,
+  )
+  useEffect(() => {
+    const mq = window.matchMedia(query)
+    const on = () => setMatches(mq.matches)
+    on()
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [query])
+  return matches
 }
 
 /**

@@ -213,10 +213,10 @@ function Activity({ summary, onOpenField, onGoMap }) {
         </div>
       ) : (
         <div className="activity-list">
-          {/* Пять строк, не больше: блок стоит в одном ряду с быстрым стартом,
-              и длинный список растягивает ряд, оставляя рядом полкарточки
-              пустого зелёного. Всё остальное — в разделе «Участки». */}
-          {fields.slice(0, 5).map((field) => (
+          {/* Четыре строки, не больше: блок стоит в одном ряду с быстрым
+              стартом, и его высота задана этим рядом, а не длиной списка.
+              Полный перечень полей — в разделе «Участки». */}
+          {fields.slice(0, 4).map((field) => (
             <ActivityRow key={field.id} field={field} onOpen={onOpenField} />
           ))}
         </div>
@@ -232,13 +232,12 @@ function ActivityRow({ field, onOpen }) {
 
   return (
     <button className="activity-row" onClick={() => onOpen(field)}>
-      <span className="dot" style={{ background: tone.color }} />
+      {/* Состояние несёт точка слева — как в макете. Отдельной плашки рядом
+          нет намеренно: она повторяла бы цвет точки словом и удваивала строку. */}
+      <span className="dot" style={{ background: tone.color }} title={tone.label} />
       <span className="who">
         <span className="name">{field.name}</span>
         <span className="what">{rowText(digest, state)}</span>
-      </span>
-      <span className="tag" style={{ background: tone.fill, color: tone.color }}>
-        {tone.label}
       </span>
       <span className="when">{ago(field.last_analyzed_at)}</span>
     </button>

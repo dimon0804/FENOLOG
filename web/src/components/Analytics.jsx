@@ -275,7 +275,7 @@ function Spark({ values, color }) {
     .map((v, i) => `${(i / (values.length - 1)) * 100},${28 - ((v - min) / span) * 26}`)
     .join(' ')
   return (
-    <svg viewBox="0 0 100 30" preserveAspectRatio="none" width="100%" height="46">
+    <svg viewBox="0 0 100 30" preserveAspectRatio="none" width="100%" height="100%">
       <polyline points={points} fill="none" stroke={color} strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
     </svg>
   )
@@ -287,7 +287,7 @@ function Bars({ values, color }) {
   const max = Math.max(...values, 1)
   const step = 100 / values.length
   return (
-    <svg viewBox="0 0 100 30" preserveAspectRatio="none" width="100%" height="46">
+    <svg viewBox="0 0 100 30" preserveAspectRatio="none" width="100%" height="100%">
       {values.map((v, i) => (
         <rect
           key={i}
@@ -308,7 +308,7 @@ function Donut({ parts }) {
   const C = 2 * Math.PI * R
   let offset = 0
   return (
-    <svg width="140" height="140" viewBox="0 0 140 140">
+    <svg className="donut" viewBox="0 0 140 140">
       <circle cx="70" cy="70" r={R} fill="none" stroke="#ececec" strokeWidth="26" />
       {parts.map((part) => {
         const len = (part.share / 100) * C
