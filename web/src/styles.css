@@ -395,6 +395,9 @@ input { font: inherit; }
 .btn.ghost:hover:not(:disabled) { background: #efefef; }
 .btn.danger { color: var(--critical); }
 .btn.sm { height: 34px; padding: 0 13px; font-size: 13px; }
+/* Ссылка-кнопка: скачивание файла — это <a download>, а не кнопка с fetch,
+   иначе файл придётся держать в памяти вкладки и собирать имя на фронте. */
+a.btn { text-decoration: none; color: inherit; cursor: pointer; }
 
 .field {
   height: 42px;

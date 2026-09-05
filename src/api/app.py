@@ -17,10 +17,11 @@ from __future__ import annotations
 
 import logging
 import time
+from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from src.api import config, geocoding
@@ -388,6 +389,46 @@ def polygons_result(polygon_id: str) -> dict:
         "analyzed_at": polygon.get("last_analyzed_at"),
         "result": result,
     }
+
+
+@app.get("/api/polygons/{polygon_id}/report.pdf", tags=["участки"])
+def polygons_report_pdf(polygon_id: str):
+    """Клиентский отчёт по участку одним PDF-файлом.
+
+    Всё, что сервис показывает на экране, написано языком метрик и рассчитано на
+    подготовленного человека. Этот маршрут отдаёт тот же анализ, но для того, кто
+    в теме не разбирается: фермера, агронома, оценщика банка или страховой.
+    Графики и формулировки собираются в `src/reporting`.
+
+    Сборка идёт через `build_pdf_safe`: отчёт скачивают одной кнопкой, и получить
+    пятисотую ошибку вместо файла хуже, чем получить документ с честным
+    сообщением о сбое.
+    """
+    polygon = store.get(polygon_id)
+    if polygon is None:
+        raise HTTPException(status_code=404, detail="Участок не найден")
+    result = load_result(polygon_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Участок ещё не анализировался")
+
+    from src.reporting.pdf import build_pdf_safe
+
+    data = build_pdf_safe(result, polygon)
+    # Имя файла уезжает в заголовок в двух видах: ASCII-запасной вариант для
+    # старых клиентов и UTF-8 по RFC 5987 для нормальных браузеров, иначе
+    # кириллица в названии участка превращается в мусор.
+    stamp = str(polygon.get("last_analyzed_at") or "")[:10]
+    ascii_name = f"fenolog-report-{polygon_id}.pdf"
+    human = f"Фенолог — {polygon.get('name') or polygon_id}{(' ' + stamp) if stamp else ''}.pdf"
+    disposition = (
+        f'attachment; filename="{ascii_name}"; '
+        f"filename*=UTF-8''{quote(human)}"
+    )
+    return Response(
+        content=data,
+        media_type="application/pdf",
+        headers={"Content-Disposition": disposition},
+    )
 
 
 # --------------------------------------------------------------------------------------
