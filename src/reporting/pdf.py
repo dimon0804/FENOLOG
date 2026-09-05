@@ -236,6 +236,22 @@ def _kv_table(rows: list[tuple[str, str]], s: dict, col: float = 55 * mm,
     return t
 
 
+def _section(title: str, image, s: dict, intro: str | None = None,
+             caption: str | None = None) -> KeepTogether:
+    """Заголовок вместе со своим графиком одним неразрывным блоком.
+
+    Иначе reportlab разрывает их по границе полосы, и читатель видит заголовок
+    без картинки внизу страницы — самый заметный дефект вёрстки из возможных.
+    """
+    block: list = [Paragraph(title, s["h2"])]
+    if intro:
+        block.append(Paragraph(intro, s["body"]))
+    block.append(image)
+    if caption:
+        block.append(Paragraph(caption, s["small"]))
+    return KeepTogether(block)
+
+
 def build_pdf(result: dict, polygon: dict | None = None) -> bytes:
     """Собирает клиентский отчёт по результату анализа. Возвращает PDF байтами.
 
@@ -285,26 +301,51 @@ def build_pdf(result: dict, polygon: dict | None = None) -> bytes:
     story.append(_kv_table(plain.field_summary(result, polygon), s))
     story.append(Spacer(1, 7 * mm))
 
-    h2("Как поле развивалось в последнем сезоне")
-    story.append(_png(charts.chart_last_season(result), 170, 80))
-    story.append(Paragraph(
-        "Сплошная линия — сколько живой зелёной массы спутник видел на поле. "
-        "Пунктир и светлая полоса — как это же поле выглядело в те же дни в прошлые "
-        "годы, то есть привычная для него норма. Пока линия идёт внутри полосы, "
-        "поле развивается обычно.", s["small"]))
+    # Короткий путь, когда считать нечего. Без него документ раскладывался на
+    # девять полос, восемь из которых почти пустые: заголовки разделов,
+    # заглушки графиков и словарь терминов к отсутствующим данным. Читателю от
+    # такого документа хуже, чем от одностраничного, — он выглядит сломанным.
+    if not (result.get("series") or []):
+        story.append(_card([
+            Paragraph("Почему отчёт короткий", s["h3"]),
+            Paragraph(
+                "По этому участку нет ни одного пригодного спутникового наблюдения, "
+                "поэтому ни ряд, ни норму, ни периоды угнетения построить не на чем. "
+                "Чаще всего причина одна из трёх: контур слишком мал для разрешения "
+                "снимка, выбранный период закрыт сплошной облачностью, либо источник "
+                "снимков был недоступен в момент сбора.", s["body"]),
+            Paragraph(
+                "Что делать: запустите разбор ещё раз чуть позже или расширьте период "
+                "наблюдений. Если контур меньше половины гектара, снимки Sentinel-2 по "
+                "нему усредняются по нескольким пикселям и результат будет ненадёжен "
+                "даже при удачном сборе.", s["body"]),
+        ], SOFT, CANVAS, s))
+        story.append(Spacer(1, 6 * mm))
+        h2("Откуда сервис берёт данные")
+        story.append(_kv_table(plain.data_sources(result), s, col=60 * mm))
+        doc.build(story)
+        return buf.getvalue()
 
     story.append(PageBreak())
+    story.append(_section(
+        "Как поле развивалось в последнем сезоне",
+        _png(charts.chart_last_season(result, height_mm=95), 170, 95), s,
+        caption="Сплошная линия — сколько живой зелёной массы спутник видел на поле. "
+                "Пунктир и светлая полоса — как это же поле выглядело в те же дни в "
+                "прошлые годы, то есть привычная для него норма. Пока линия идёт "
+                "внутри полосы, поле развивается обычно."))
+    story.append(Spacer(1, 6 * mm))
 
     # ------------------------------------------------------------------ #
-    # Страница 2. Вся история наблюдений
+    # Вся история наблюдений
     # ------------------------------------------------------------------ #
-    h2("Вся история наблюдений")
-    story.append(Paragraph(
-        "Здесь видно поведение поля за все сезоны, которые удалось собрать. "
-        "Каждый год повторяется одна и та же волна: рост весной, максимум в начале "
-        "лета, спад после уборки. Отклонения от этой волны и есть то, что сервис ищет.",
-        s["body"]))
-    story.append(_png(charts.chart_series(result, height_mm=98), 170, 98))
+    story.append(_section(
+        "Вся история наблюдений",
+        _png(charts.chart_series(result, height_mm=92), 170, 92), s,
+        intro="Здесь видно поведение поля за все сезоны, которые удалось собрать. "
+              "Каждый год повторяется одна и та же волна: рост весной, максимум в "
+              "начале лета, спад после уборки. Отклонения от этой волны и есть то, "
+              "что сервис ищет."))
     story.append(Spacer(1, 5 * mm))
 
     h2("Что означают события на графике")
@@ -367,9 +408,12 @@ def build_pdf(result: dict, polygon: dict | None = None) -> bytes:
         "залоге или покупке. Балл собран из четырёх свойств и снижен там, где данных "
         "мало — завышать оценку из-за короткой истории было бы нечестно.", s["body"]))
 
+    score_value = sc.get("score")
+    has_score = isinstance(score_value, (int, float))
     grade_cell = Table([
-        [Paragraph(str(sc.get("score", "—")), s["score_num"])],
-        [Paragraph(f"класс {sc.get('grade', '—')}", s["small"])],
+        [Paragraph(str(score_value) if has_score else "—", s["score_num"])],
+        [Paragraph(f"класс {sc.get('grade')}" if sc.get("grade") else "балл не выставлен",
+                   s["small"])],
     ], colWidths=[32 * mm])
     grade_cell.setStyle(TableStyle([
         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
@@ -389,8 +433,7 @@ def build_pdf(result: dict, polygon: dict | None = None) -> bytes:
     # Полосу красим по самому баллу, а не по тону вердикта: рядом с числом 53
     # красная полоса из-за сегодняшнего состояния поля читалась бы как оценка
     # этого числа, хотя балл считается за все сезоны сразу.
-    score_value = sc.get("score")
-    if not isinstance(score_value, (int, float)):
+    if not has_score:
         score_accent = SOFT
     elif score_value >= 70:
         score_accent = GREEN
@@ -401,20 +444,30 @@ def build_pdf(result: dict, polygon: dict | None = None) -> bytes:
     story.append(_card([head], score_accent, CANVAS, s, pad=5 * mm))
     story.append(Spacer(1, 5 * mm))
 
-    h2("Из чего собран балл")
-    story.append(_png(charts.chart_score(result, width_mm=170, height_mm=52), 170, 52))
-    for label, value, hint in sc.get("components", []):
-        story.append(Paragraph(f"<b>{label} — {value} из 100.</b> {hint}", s["small"]))
-    story.append(Spacer(1, 5 * mm))
+    if has_score:
+        story.append(_section(
+            "Из чего собран балл",
+            _png(charts.chart_score(result, width_mm=170, height_mm=52), 170, 52), s))
+        for label, value, hint in sc.get("components", []):
+            story.append(Paragraph(f"<b>{label} — {value} из 100.</b> {hint}", s["small"]))
+        story.append(Spacer(1, 5 * mm))
 
-    story.append(PageBreak())
+    # Таблица по сезонам приходит из ядра отдельно от балла и бывает заполнена,
+    # даже когда балл выставить не удалось. Но если пуста и она — рисовать
+    # заглушку не нужно: словами это уже сказано в карточке выше.
+    seasons = ((meta.get("score") or {}).get("seasons") or [])
+    if seasons:
+        # Разрыв нужен только когда выше есть блок компонент балла: иначе раздел
+        # начинался бы с пустой полосы.
+        if has_score:
+            story.append(PageBreak())
 
-    h2("Как поле вело себя по сезонам")
-    story.append(Paragraph(
-        "Столбик — сколько зелёной массы поле набрало за сезон целиком. Это не "
-        "урожай в центнерах, а его косвенная мера: чем выше столбик, тем больше "
-        "поле работало за лето.", s["body"]))
-    story.append(_png(charts.chart_seasons(result, height_mm=78), 170, 78))
+        story.append(_section(
+            "Как поле вело себя по сезонам",
+            _png(charts.chart_seasons(result, height_mm=78), 170, 78), s,
+            intro="Столбик — сколько зелёной массы поле набрало за сезон целиком. "
+                  "Это не урожай в центнерах, а его косвенная мера: чем выше "
+                  "столбик, тем больше поле работало за лето."))
 
     if sc.get("caveats"):
         story.append(Spacer(1, 5 * mm))
@@ -437,11 +490,12 @@ def build_pdf(result: dict, polygon: dict | None = None) -> bytes:
         Paragraph(fb.get("confidence_words", ""), s["small"]),
     ], f_acc, f_bg, s, pad=4 * mm))
     story.append(Spacer(1, 5 * mm))
-    story.append(_png(charts.chart_forecast(result), 170, 70))
-    story.append(Paragraph(
-        "Затенённая область — не ошибка расчёта, а честный разброс: внутри неё "
-        "значение окажется с высокой вероятностью. Чем дальше от сегодняшнего дня, "
-        "тем шире область — так и должно быть.", s["small"]))
+    story.append(_section(
+        "Как это выглядит на графике",
+        _png(charts.chart_forecast(result, height_mm=80), 170, 80), s,
+        caption="Затенённая область — не ошибка расчёта, а честный разброс: внутри "
+                "неё значение окажется с высокой вероятностью. Чем дальше от "
+                "сегодняшнего дня, тем шире область — так и должно быть."))
 
     story.append(PageBreak())
 

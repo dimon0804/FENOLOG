@@ -25,3 +25,7 @@ data/polygons.*.json
 data/results/
 reports/_server.log
 reports/demo_field.json
+reports/_server8001.log
+reports/_server8001.err
+reports/_warmup.log
+reports/_fixture_result.json
