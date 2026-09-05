@@ -1,6 +1,0 @@
-INFO:     Started server process [69000]
-INFO:     Waiting for application startup.
-2026-09-05 10:14:32,441 INFO fenolog.api: норма по культурам на месте: C:\Users\Dmitry\Desktop\fenolog\models\crop_climatology.json
-2026-09-05 10:14:32,441 INFO fenolog.api: интерфейс: C:\Users\Dmitry\Desktop\fenolog\web\dist
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
