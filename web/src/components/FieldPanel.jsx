@@ -46,6 +46,7 @@ export default function FieldPanel({
           {draft && (
             <>
               <input
+                type="text"
                 className="field"
                 style={{ width: 200 }}
                 placeholder="название поля"

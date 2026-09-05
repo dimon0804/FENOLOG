@@ -69,6 +69,7 @@ export default function Fields({ summary, selectedId, onOpen, onRename, onDelete
                       }}
                     >
                       <input
+                        type="text"
                         className="field"
                         autoFocus
                         value={name}
